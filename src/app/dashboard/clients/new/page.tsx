@@ -1,0 +1,158 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
+
+const industries = [
+  'HVAC', 'Plumbing', 'Roofing', 'Electrical', 'Windows & Doors',
+  'Painting', 'Landscaping', 'Dental', 'Legal', 'Real Estate',
+  'SaaS', 'IT Services', 'E-commerce', 'Restaurant', 'Other'
+]
+
+export default function NewClientPage() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [form, setForm] = useState({
+    name: '',
+    industry: '',
+    website: '',
+  })
+
+  async function handleSubmit() {
+    if (!form.name) return
+    setLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        alert('Session error — please log out and back in')
+        setLoading(false)
+        return
+      }
+
+      const { data: member, error: memberError } = await supabase
+        .from('organization_members')
+        .select('org_id')
+        .eq('user_id', session.user.id)
+        .single()
+
+      if (memberError || !member) {
+        alert('No organization found. Error: ' + memberError?.message)
+        setLoading(false)
+        return
+      }
+
+      const { error: insertError } = await supabase.from('clients').insert({
+        org_id: member.org_id,
+        name: form.name,
+        industry: form.industry,
+        website: form.website,
+        active: true,
+      })
+
+      if (insertError) {
+        alert('Error saving client: ' + insertError.message)
+        setLoading(false)
+        return
+      }
+
+      router.push('/dashboard/clients')
+    } catch (e: any) {
+      alert('Unexpected error: ' + e.message)
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
+      <div style={{ width: '220px', background: '#0D1B3E', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'fixed', top: 0, left: 0, height: '100vh' }}>
+        <div style={{ padding: '20px 16px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
+          <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '700', color: '#fff', margin: 0 }}>
+            SOURCE <span style={{ color: '#A78BFA' }}>HQ</span>
+          </h1>
+        </div>
+        <nav style={{ padding: '8px', flex: 1 }}>
+          {[
+            { label: 'Dashboard', href: '/dashboard', active: false },
+            { label: 'Clients', href: '/dashboard/clients', active: true },
+            { label: 'Reports', href: '/dashboard', active: false },
+            { label: 'Connections', href: '/dashboard', active: false },
+            { label: 'Insights', href: '/dashboard', active: false },
+            { label: 'Settings', href: '/dashboard', active: false },
+          ].map(item => (
+            <Link key={item.label} href={item.href} style={{ display: 'block', padding: '8px 12px', borderRadius: '6px', margin: '1px 0', fontSize: '13px', fontWeight: '500', color: item.active ? '#C4B5FD' : 'rgba(255,255,255,0.5)', background: item.active ? 'rgba(109,40,217,0.15)' : 'transparent', textDecoration: 'none' }}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+
+      <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
+        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none' }}>← Clients</Link>
+            <span style={{ color: '#E5E5E3' }}>|</span>
+            <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Add client</span>
+          </div>
+        </div>
+
+        <div style={{ padding: '32px', maxWidth: '600px' }}>
+          <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: '700', color: '#0D1B3E', marginBottom: '6px' }}>New client</h2>
+          <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '32px' }}>Add a client to start connecting data sources and generating reports.</p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Client name *</label>
+              <input
+                type="text"
+                placeholder="e.g. Denver HVAC Co."
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Industry</label>
+              <select
+                value={form.industry}
+                onChange={e => setForm({ ...form, industry: e.target.value })}
+                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
+              >
+                <option value="">Select industry...</option>
+                {industries.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Website</label>
+              <input
+                type="text"
+                placeholder="e.g. https://denverheating.com"
+                value={form.website}
+                onChange={e => setForm({ ...form, website: e.target.value })}
+                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', paddingTop: '8px' }}>
+              <button
+                onClick={handleSubmit}
+                disabled={loading || !form.name}
+                style={{ background: loading || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: loading || !form.name ? 'not-allowed' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+              >
+                {loading ? 'Saving...' : 'Save client'}
+              </button>
+              <Link href="/dashboard/clients" style={{ padding: '10px 24px', fontSize: '13px', fontWeight: '500', color: '#6B7280', textDecoration: 'none', border: '0.5px solid #E5E5E3', borderRadius: '8px', display: 'inline-flex', alignItems: 'center' }}>
+                Cancel
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
