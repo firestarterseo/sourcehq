@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+:root {
+  --color-midnight: #0D1B3E;
+  --color-violet: #6D28D9;
+  --color-lavender: #EDE9FE;
+  --color-white: #FAFAFA;
+}
+
+body {
+  font-family: var(--font-dm-sans), sans-serif;
+  background: #FAFAFA;
+  color: #0D1B3E;
+}
