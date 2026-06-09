@@ -1,19 +1,14 @@
 import { createServerSupabaseClient } from '@/lib/supabase'
-import { redirect } from 'next/navigation'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET() {
-  const supabase = await createServerSupabaseClient()
+export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url)
+  const code = requestUrl.searchParams.get('code')
 
-  const { data } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-    },
-  })
-
-  if (data.url) {
-    redirect(data.url)
+  if (code) {
+    const supabase = await createServerSupabaseClient()
+    await supabase.auth.exchangeCodeForSession(code)
   }
 
-  redirect('/')
+  return NextResponse.redirect(new URL('/dashboard', request.url))
 }
