@@ -1,8 +1,8 @@
-import { createClient } from '@/lib/supabase'
+import { createServerSupabaseClient } from '@/lib/supabase'
 import { redirect } from 'next/navigation'
 
 export default async function Dashboard() {
-  const supabase = createClient()
+  const supabase = await createServerSupabaseClient()
   const { data: { session } } = await supabase.auth.getSession()
 
   if (!session) {
@@ -12,7 +12,7 @@ export default async function Dashboard() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="border-b border-gray-200 bg-white px-8 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">SOURCE<span className="text-orange-500">HQ</span></h1>
+        <h1 className="text-xl font-bold text-gray-900">SOURCE <span className="text-orange-500">HQ</span></h1>
         <span className="text-sm text-gray-500">{session.user.email}</span>
       </div>
       <div className="px-8 py-10">
