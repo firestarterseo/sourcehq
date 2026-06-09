@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
+const FIRESTARTER_ORG_ID = 'd3acaf18-a924-4d25-8f5a-99b6893ae843'
+
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -39,19 +41,15 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    const { data: member, error: memberError } = await adminSupabase
-      .from('organization_members')
-      .select('org_id')
-      .eq('user_id', session.user.id)
-      .single()
-
-    if (memberError || !member) {
-      return NextResponse.json({ error: 'No organization found: ' + memberError?.message }, { status: 400 })
-    }
-
     const { data: client, error: insertError } = await adminSupabase
       .from('clients')
-      .insert({ org_id: member.org_id, name, industry, website, active: true })
+      .insert({ 
+        org_id: FIRESTARTER_ORG_ID, 
+        name, 
+        industry, 
+        website, 
+        active: true 
+      })
       .select()
       .single()
 
