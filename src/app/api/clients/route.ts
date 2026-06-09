@@ -7,9 +7,16 @@ const FIRESTARTER_ORG_ID = 'd3acaf18-a924-4d25-8f5a-99b6893ae843'
 
 export async function POST(request: NextRequest) {
   try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!serviceKey) {
+      return NextResponse.json({ error: 'Service key missing' }, { status: 500 })
+    }
+
     const cookieStore = await cookies()
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      url,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
@@ -36,10 +43,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Client name is required' }, { status: 400 })
     }
 
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const adminSupabase = createClient(url, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
 
     const { data: client, error: insertError } = await adminSupabase
       .from('clients')
