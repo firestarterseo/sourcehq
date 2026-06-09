@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase'
+import { createServerSupabaseClient } from '@/lib/supabase'
 import { redirect } from 'next/navigation'
 
 export async function GET() {
-  const supabase = createClient()
-  
+  const supabase = await createServerSupabaseClient()
+
   const { data } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
