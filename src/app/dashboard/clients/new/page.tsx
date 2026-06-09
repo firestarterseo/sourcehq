@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
 
 const industries = [
   'HVAC', 'Plumbing', 'Roofing', 'Electrical', 'Windows & Doors',
@@ -88,6 +87,7 @@ export default function NewClientPage() {
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Client name *</label>
               <input type="text" placeholder="e.g. Denver HVAC Co." value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
             </div>
+
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Industry</label>
               <select value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}>
@@ -95,10 +95,12 @@ export default function NewClientPage() {
                 {industries.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
             </div>
+
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Website</label>
               <input type="text" placeholder="e.g. https://denverheating.com" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
             </div>
+
             <div style={{ display: 'flex', gap: '12px', paddingTop: '8px' }}>
               <button onClick={handleSubmit} disabled={loading || !form.name} style={{ background: loading || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: loading || !form.name ? 'not-allowed' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                 {loading ? 'Saving...' : 'Save client'}
