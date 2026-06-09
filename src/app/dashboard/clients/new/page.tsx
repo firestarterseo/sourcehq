@@ -14,54 +14,30 @@ const industries = [
 export default function NewClientPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({
-    name: '',
-    industry: '',
-    website: '',
-  })
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({ name: '', industry: '', website: '' })
 
   async function handleSubmit() {
     if (!form.name) return
     setLoading(true)
+    setError('')
+
     try {
-      const supabase = createClient()
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-      if (sessionError || !session) {
-        alert('Session error — please log out and back in')
-        setLoading(false)
-        return
-      }
-
-      const { data: member, error: memberError } = await supabase
-        .from('organization_members')
-        .select('org_id')
-        .eq('user_id', session.user.id)
-        .single()
-
-      if (memberError || !member) {
-        alert('No organization found. Error: ' + memberError?.message)
-        setLoading(false)
-        return
-      }
-
-      const { error: insertError } = await supabase.from('clients').insert({
-        org_id: member.org_id,
-        name: form.name,
-        industry: form.industry,
-        website: form.website,
-        active: true,
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
       })
-
-      if (insertError) {
-        alert('Error saving client: ' + insertError.message)
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Failed to save client')
         setLoading(false)
         return
       }
-
       router.push('/dashboard/clients')
+      router.refresh()
     } catch (e: any) {
-      alert('Unexpected error: ' + e.message)
+      setError('Unexpected error: ' + e.message)
       setLoading(false)
     }
   }
@@ -91,59 +67,40 @@ export default function NewClientPage() {
       </div>
 
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
-        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none' }}>← Clients</Link>
-            <span style={{ color: '#E5E5E3' }}>|</span>
-            <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Add client</span>
-          </div>
+        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center' }}>
+          <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', marginRight: '12px' }}>← Clients</Link>
+          <span style={{ color: '#E5E5E3', marginRight: '12px' }}>|</span>
+          <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Add client</span>
         </div>
 
         <div style={{ padding: '32px', maxWidth: '600px' }}>
           <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: '700', color: '#0D1B3E', marginBottom: '6px' }}>New client</h2>
           <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '32px' }}>Add a client to start connecting data sources and generating reports.</p>
 
+          {error && (
+            <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>
+              {error}
+            </div>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Client name *</label>
-              <input
-                type="text"
-                placeholder="e.g. Denver HVAC Co."
-                value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
-              />
+              <input type="text" placeholder="e.g. Denver HVAC Co." value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
             </div>
-
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Industry</label>
-              <select
-                value={form.industry}
-                onChange={e => setForm({ ...form, industry: e.target.value })}
-                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
-              >
+              <select value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}>
                 <option value="">Select industry...</option>
                 {industries.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
             </div>
-
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Website</label>
-              <input
-                type="text"
-                placeholder="e.g. https://denverheating.com"
-                value={form.website}
-                onChange={e => setForm({ ...form, website: e.target.value })}
-                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
-              />
+              <input type="text" placeholder="e.g. https://denverheating.com" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
             </div>
-
             <div style={{ display: 'flex', gap: '12px', paddingTop: '8px' }}>
-              <button
-                onClick={handleSubmit}
-                disabled={loading || !form.name}
-                style={{ background: loading || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: loading || !form.name ? 'not-allowed' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}
-              >
+              <button onClick={handleSubmit} disabled={loading || !form.name} style={{ background: loading || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: loading || !form.name ? 'not-allowed' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                 {loading ? 'Saving...' : 'Save client'}
               </button>
               <Link href="/dashboard/clients" style={{ padding: '10px 24px', fontSize: '13px', fontWeight: '500', color: '#6B7280', textDecoration: 'none', border: '0.5px solid #E5E5E3', borderRadius: '8px', display: 'inline-flex', alignItems: 'center' }}>
