@@ -5,12 +5,12 @@ import Sidebar from '@/components/Sidebar'
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-if (!user) redirect('/')
+  const { data: { user } } = await supabase.auth.getSession()
+if (!session) redirect('/')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
-      <Sidebar active="Settings" email={user.email!} />
+      <Sidebar active="Settings" email={session.user.email!} />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6', display: 'flex', flexDirection: 'column' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center' }}>
           <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Settings</span>
@@ -20,7 +20,7 @@ if (!user) redirect('/')
           <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px' }}>
             <div style={{ padding: '16px 20px', borderBottom: '0.5px solid #E5E5E3' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Account</div>
-              <div style={{ fontSize: '13px', color: '#6B7280' }}>{user.email}</div>
+              <div style={{ fontSize: '13px', color: '#6B7280' }}>{session.user.email}</div>
             </div>
             <div style={{ padding: '16px 20px', borderBottom: '0.5px solid #E5E5E3' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Organization</div>

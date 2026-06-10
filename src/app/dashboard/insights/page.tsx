@@ -4,12 +4,12 @@ import Sidebar from '@/components/Sidebar'
 
 export default async function InsightsPage() {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-if (!user) redirect('/')
+  const { data: { user } } = await supabase.auth.getSession()
+if (!session) redirect('/')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
-      <Sidebar active="Insights" email={user.email!} />
+      <Sidebar active="Insights" email={session.user.email!} />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6', display: 'flex', flexDirection: 'column' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center' }}>
           <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Insights</span>
