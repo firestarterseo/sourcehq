@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
+import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 
 export default async function Dashboard() {
