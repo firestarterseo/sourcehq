@@ -5,9 +5,8 @@ import Sidebar from '@/components/Sidebar'
 
 export default async function Dashboard() {
   const supabase = await createServerSupabaseClient()
-  const { data: { session } } = await supabase.auth.getSession()
-
-  if (!session) redirect('/')
+  const { data: { user } } = await supabase.auth.getUser()
+if (!user) redirect('/')
 
   // Fetch real stats
   const { data: clients } = await supabase

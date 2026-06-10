@@ -4,8 +4,8 @@ import Sidebar from '@/components/Sidebar'
 
 export default async function InsightsPage() {
   const supabase = await createServerSupabaseClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/')
+  const { data: { user } } = await supabase.auth.getUser()
+if (!user) redirect('/')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
