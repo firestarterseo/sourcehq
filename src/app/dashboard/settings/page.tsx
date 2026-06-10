@@ -1,12 +1,11 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
+import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { session } } = await supabase.auth.getSession()
-const email = session?.user?.email || ''
+  const email = session?.user?.email || ''
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
@@ -20,7 +19,7 @@ const email = session?.user?.email || ''
           <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px' }}>
             <div style={{ padding: '16px 20px', borderBottom: '0.5px solid #E5E5E3' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Account</div>
-              <div style={{ fontSize: '13px', color: '#6B7280' }}>{email}</div>
+              <div style={{ fontSize: '13px', color: '#6B7280' }}>{email || '—'}</div>
             </div>
             <div style={{ padding: '16px 20px', borderBottom: '0.5px solid #E5E5E3' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Organization</div>

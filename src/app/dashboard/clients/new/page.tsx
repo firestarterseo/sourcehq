@@ -2,12 +2,23 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
+import Link from 'next/link'
+import Sidebar from '@/components/Sidebar'
 
 const industries = [
   'HVAC', 'Plumbing', 'Roofing', 'Electrical', 'Windows & Doors',
-  'Painting', 'Landscaping', 'Dental', 'Legal', 'Real Estate',
-  'SaaS', 'IT Services', 'E-commerce', 'Restaurant', 'Other'
+  'Painting', 'Landscaping', 'Pest Control', 'Cleaning Services',
+  'Dental', 'Medical', 'Chiropractic', 'Veterinary',
+  'Legal', 'Accounting', 'Financial Services',
+  'Real Estate', 'Mortgage',
+  'Restaurant', 'Hospitality',
+  'SaaS', 'IT Services', 'Cybersecurity',
+  'E-commerce', 'Retail',
+  'Digital Marketing / SEO', 'Advertising Agency',
+  'Construction', 'General Contractor',
+  'Auto Repair', 'Dealership',
+  'Education', 'Childcare',
+  'Other'
 ]
 
 export default function NewClientPage() {
@@ -20,7 +31,6 @@ export default function NewClientPage() {
     if (!form.name) return
     setLoading(true)
     setError('')
-
     try {
       const res = await fetch('/api/clients', {
         method: 'POST',
@@ -43,51 +53,26 @@ export default function NewClientPage() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
-      <div style={{ width: '220px', background: '#0D1B3E', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'fixed', top: 0, left: 0, height: '100vh' }}>
-        <div style={{ padding: '20px 16px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
-          <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '700', color: '#fff', margin: 0 }}>
-            SOURCE <span style={{ color: '#A78BFA' }}>HQ</span>
-          </h1>
-        </div>
-        <nav style={{ padding: '8px', flex: 1 }}>
-          {[
-            { label: 'Dashboard', href: '/dashboard', active: false },
-            { label: 'Clients', href: '/dashboard/clients', active: true },
-            { label: 'Reports', href: '/dashboard', active: false },
-            { label: 'Connections', href: '/dashboard', active: false },
-            { label: 'Insights', href: '/dashboard', active: false },
-            { label: 'Settings', href: '/dashboard', active: false },
-          ].map(item => (
-            <Link key={item.label} href={item.href} style={{ display: 'block', padding: '8px 12px', borderRadius: '6px', margin: '1px 0', fontSize: '13px', fontWeight: '500', color: item.active ? '#C4B5FD' : 'rgba(255,255,255,0.5)', background: item.active ? 'rgba(109,40,217,0.15)' : 'transparent', textDecoration: 'none' }}>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
+      <Sidebar active="Clients" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center' }}>
           <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', marginRight: '12px' }}>← Clients</Link>
           <span style={{ color: '#E5E5E3', marginRight: '12px' }}>|</span>
           <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Add client</span>
         </div>
-
         <div style={{ padding: '32px', maxWidth: '600px' }}>
           <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: '700', color: '#0D1B3E', marginBottom: '6px' }}>New client</h2>
           <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '32px' }}>Add a client to start connecting data sources and generating reports.</p>
-
           {error && (
             <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>
               {error}
             </div>
           )}
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Client name *</label>
               <input type="text" placeholder="e.g. Denver HVAC Co." value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
             </div>
-
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Industry</label>
               <select value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}>
@@ -95,12 +80,10 @@ export default function NewClientPage() {
                 {industries.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
             </div>
-
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Website</label>
               <input type="text" placeholder="e.g. https://denverheating.com" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
             </div>
-
             <div style={{ display: 'flex', gap: '12px', paddingTop: '8px' }}>
               <button onClick={handleSubmit} disabled={loading || !form.name} style={{ background: loading || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: loading || !form.name ? 'not-allowed' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                 {loading ? 'Saving...' : 'Save client'}

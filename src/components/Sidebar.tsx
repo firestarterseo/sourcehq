@@ -1,4 +1,4 @@
-import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
+import Link from 'next/link'
 import Logo from '@/components/Logo'
 
 interface SidebarProps {

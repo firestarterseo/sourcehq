@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
+import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 
 export default async function ClientsPage() {
@@ -17,7 +17,6 @@ export default async function ClientsPage() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-dm-sans), DM Sans, sans-serif' }}>
       <Sidebar active="Clients" email="" />
-
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Clients</span>
@@ -25,7 +24,6 @@ export default async function ClientsPage() {
             + Add client
           </Link>
         </div>
-
         <div style={{ padding: '24px' }}>
           {clients && clients.length > 0 ? (
             <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', overflow: 'hidden' }}>

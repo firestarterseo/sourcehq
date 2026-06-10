@@ -1,11 +1,10 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { redirect } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 
 export default async function InsightsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { session } } = await supabase.auth.getSession()
-const email = session?.user?.email || ''
+  const email = session?.user?.email || ''
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
