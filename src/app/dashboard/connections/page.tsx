@@ -5,7 +5,7 @@ import Link from 'next/link'
 export default async function ConnectionsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { session } } = await supabase.auth.getSession()
-if (!session) redirect('/')
+const email = session?.user?.email || ''
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>

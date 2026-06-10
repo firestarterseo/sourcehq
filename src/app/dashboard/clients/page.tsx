@@ -6,7 +6,7 @@ import Sidebar from '@/components/Sidebar'
 export default async function ClientsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { session } } = await supabase.auth.getSession()
-// if (!session) redirect('/')
+// const email = session?.user?.email || ''
 const email = session?.user?.email || 'unknown'
 
   const { data: clients } = await supabase
