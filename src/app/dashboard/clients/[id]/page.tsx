@@ -14,6 +14,31 @@ interface Client {
   created_at: string
 }
 
+interface GscRow {
+  query?: string
+  page?: string
+  clicks: number
+  impressions: number
+  ctr: string
+  position: string
+}
+
+interface GscData {
+  connected: boolean
+  revoked?: boolean
+  error?: string
+  property?: string
+  summary?: {
+    clicks: number
+    impressions: number
+    ctr: string
+    position: string
+    period: string
+  }
+  topQueries?: GscRow[]
+  topPages?: GscRow[]
+}
+
 const industries = [
   'HVAC', 'Plumbing', 'Roofing', 'Electrical', 'Windows & Doors',
   'Painting', 'Landscaping', 'Pest Control', 'Cleaning Services',
@@ -41,6 +66,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', industry: '', website: '' })
+  const [gsc, setGsc] = useState<GscData | null>(null)
+  const [gscLoading, setGscLoading] = useState(true)
 
   useEffect(() => {
     fetch(`/api/clients/${id}`)
@@ -57,6 +84,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         setLoading(false)
       })
       .catch(() => setLoading(false))
+
+    fetch(`/api/clients/${id}/gsc`)
+      .then(r => r.json())
+      .then(data => { setGsc(data); setGscLoading(false) })
+      .catch(() => { setGsc(null); setGscLoading(false) })
   }, [id])
 
   async function handleSave() {
@@ -81,6 +113,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     if (res.ok) { router.push('/dashboard/clients'); router.refresh() }
     else { setError('Failed to delete client'); setDeleting(false); setShowDeleteConfirm(false) }
   }
+
+  const isConnected = !!gsc?.connected
+  const fmt = (n: number) => n.toLocaleString('en-US')
 
   if (loading) return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
@@ -120,7 +155,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        <div style={{ padding: '32px', maxWidth: '700px' }}>
+        <div style={{ padding: '32px', maxWidth: '900px' }}>
           {error && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>}
 
           {showDeleteConfirm && (
@@ -180,18 +215,27 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             )}
           </div>
 
-          <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+          <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
             <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E', marginBottom: '8px' }}>Data connections</h2>
             <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '16px' }}>Connect data sources to start generating SOURCE reports.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>Google (GSC, GA4, GBP, Ads)</div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>Search Console · Analytics · Business Profile · Ads</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isConnected ? '#10B981' : '#D1D5DB', flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>Google (GSC, GA4, GBP, Ads)</div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+                      {gscLoading ? 'Checking connection...' : isConnected ? (gsc?.property ? `Connected · ${gsc.property}` : 'Connected') : gsc?.revoked ? 'Access revoked — reconnect needed' : 'Search Console · Analytics · Business Profile · Ads'}
+                    </div>
+                  </div>
                 </div>
-                <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
-                  Connect Google
-                </a>
+                {isConnected ? (
+                  <span style={{ fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46' }}>Connected</span>
+                ) : (
+                  <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
+                    {gsc?.revoked ? 'Reconnect Google' : 'Connect Google'}
+                  </a>
+                )}
               </div>
               {['CallRail', 'Ahrefs', 'SEMrush'].map(source => (
                 <div key={source} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
@@ -201,6 +245,69 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               ))}
             </div>
           </div>
+
+          {isConnected && (
+            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E' }}>Search Console</h2>
+                {gsc?.summary && <span style={{ fontSize: '12px', color: '#9CA3AF' }}>{gsc.summary.period}</span>}
+              </div>
+
+              {gsc?.error ? (
+                <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#92400E' }}>{gsc.error}</div>
+              ) : gsc?.summary ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+                    {[
+                      { label: 'Clicks', value: fmt(gsc.summary.clicks) },
+                      { label: 'Impressions', value: fmt(gsc.summary.impressions) },
+                      { label: 'CTR', value: `${gsc.summary.ctr}%` },
+                      { label: 'Avg position', value: gsc.summary.position },
+                    ].map(stat => (
+                      <div key={stat.label} style={{ background: '#EDE9FE', borderRadius: '10px', padding: '16px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '500', color: '#6D28D9', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{stat.label}</div>
+                        <div style={{ fontFamily: 'Outfit, sans-serif', fontSize: '24px', fontWeight: '600', color: '#0D1B3E' }}>{stat.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    {[
+                      { title: 'Top queries', rows: gsc.topQueries || [], key: 'query' as const },
+                      { title: 'Top pages', rows: gsc.topPages || [], key: 'page' as const },
+                    ].map(table => (
+                      <div key={table.title}>
+                        <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#0D1B3E', marginBottom: '10px' }}>{table.title}</h3>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: 'left', fontSize: '11px', fontWeight: '500', color: '#9CA3AF', paddingBottom: '6px' }}></th>
+                              <th style={{ textAlign: 'right', fontSize: '11px', fontWeight: '500', color: '#9CA3AF', paddingBottom: '6px' }}>Clicks</th>
+                              <th style={{ textAlign: 'right', fontSize: '11px', fontWeight: '500', color: '#9CA3AF', paddingBottom: '6px' }}>Pos</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {table.rows.length === 0 && (
+                              <tr><td colSpan={3} style={{ fontSize: '12px', color: '#9CA3AF', padding: '12px 0', textAlign: 'center' }}>No data yet</td></tr>
+                            )}
+                            {table.rows.map((row, i) => (
+                              <tr key={i} style={{ borderTop: '0.5px solid #F3F4F6' }}>
+                                <td style={{ fontSize: '12px', color: '#0D1B3E', padding: '8px 8px 8px 0', maxWidth: '0', width: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row[table.key]}</td>
+                                <td style={{ fontSize: '12px', color: '#0D1B3E', padding: '8px 0', textAlign: 'right' }}>{fmt(row.clicks)}</td>
+                                <td style={{ fontSize: '12px', color: '#6B7280', padding: '8px 0', textAlign: 'right' }}>{row.position}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading Search Console data...</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
