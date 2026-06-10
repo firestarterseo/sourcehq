@@ -1,25 +1,23 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {}
-        },
-      },
-    }
-  )
-  await supabase.auth.signOut()
-  return NextResponse.redirect(new URL('https://sourcehq.vercel.app'))
+  const response = NextResponse.redirect('https://sourcehq.vercel.app')
+  
+  // Clear all Supabase auth cookies
+  const cookieNames = [
+    'sb-pmddszggtjfwrkkepmrx-auth-token',
+    'sb-pmddszggtjfwrkkepmrx-auth-token.0',
+    'sb-pmddszggtjfwrkkepmrx-auth-token.1',
+    'sb-access-token',
+    'sb-refresh-token',
+  ]
+  
+  cookieNames.forEach(name => {
+    response.cookies.set(name, '', {
+      expires: new Date(0),
+      path: '/',
+    })
+  })
+
+  return response
 }
