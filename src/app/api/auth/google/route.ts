@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
   const scopes = [
     'https://www.googleapis.com/auth/webmasters.readonly',
     'https://www.googleapis.com/auth/analytics.readonly',
-    'https://www.googleapis.com/auth/business.manage',
   ].join(' ')
 
   const params = new URLSearchParams({
