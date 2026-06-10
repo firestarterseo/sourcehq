@@ -1,22 +1,22 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { redirect } from 'next/navigation'
+import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 
 export default async function ClientsPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { session } } = await supabase.auth.getSession()
-// const email = session?.user?.email || ''
-const email = session?.user?.email || 'unknown'
+  const adminSupabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
 
-  const { data: clients } = await supabase
+  const { data: clients } = await adminSupabase
     .from('clients')
     .select('*')
     .order('created_at', { ascending: false })
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-dm-sans), DM Sans, sans-serif' }}>
-      <Sidebar active="Dashboard" email={email} />
+      <Sidebar active="Clients" email="" />
 
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
