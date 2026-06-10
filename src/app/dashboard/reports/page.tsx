@@ -3,11 +3,6 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 
-  return (
-    <Sidebar active="Dashboard" email={session.user.email!} />
-  )
-}
-
 function ComingSoon({ title, description, icon }: { title: string, description: string, icon: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '32px' }}>
