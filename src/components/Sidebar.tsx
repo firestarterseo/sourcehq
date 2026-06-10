@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Logo from '@/components/Logo'
+import SignOutButton from '@/components/SignOutButton'
 
 interface SidebarProps {
   active: string
@@ -38,23 +39,7 @@ export default function Sidebar({ active, email }: SidebarProps) {
             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px' }}>{email}</div>
           </div>
         </div>
-        <a
-          href="/auth/signout"
-          style={{
-            display: 'block',
-            padding: '8px 12px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '500',
-            color: 'rgba(255,255,255,0.5)',
-            textDecoration: 'none',
-            border: '0.5px solid rgba(255,255,255,0.1)',
-            textAlign: 'center',
-            cursor: 'pointer',
-          }}
-        >
-          Sign out
-        </a>
+        <SignOutButton />
       </div>
     </div>
   )
