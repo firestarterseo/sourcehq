@@ -5,7 +5,7 @@ import Logo from '@/components/Logo'
 export default async function Home() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
-if (!user) redirect('/')
+if (user) redirect('/dashboard')
 
   return (
     <main className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #EDE9FE 0%, #E0E7FF 100%)' }}>
