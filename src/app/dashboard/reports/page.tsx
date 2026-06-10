@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 
-function Sidebar({ active, email }: { active: string, email: string }) {
   return (
     <Sidebar active="Dashboard" email={session.user.email!} />
   )
