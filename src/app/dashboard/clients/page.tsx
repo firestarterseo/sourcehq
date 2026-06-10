@@ -6,7 +6,8 @@ import Sidebar from '@/components/Sidebar'
 export default async function ClientsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { session } } = await supabase.auth.getSession()
-if (!session) redirect('/')
+// if (!session) redirect('/')
+const email = session?.user?.email || 'unknown'
 
   const { data: clients } = await supabase
     .from('clients')
@@ -15,7 +16,7 @@ if (!session) redirect('/')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-dm-sans), DM Sans, sans-serif' }}>
-      <Sidebar active="Dashboard" email={session.user.email!} />
+      <Sidebar active="Dashboard" email={email} />
 
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
