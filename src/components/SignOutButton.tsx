@@ -1,11 +1,13 @@
 'use client'
 
+import { createClient } from '@/lib/supabase'
+
 export default function SignOutButton() {
-  function handleSignOut() {
-    // Clear all storage
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
     localStorage.clear()
     sessionStorage.clear()
-    // Redirect to login
     window.location.href = 'https://sourcehq.vercel.app'
   }
 
