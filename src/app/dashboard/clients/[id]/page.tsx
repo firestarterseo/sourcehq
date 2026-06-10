@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -19,7 +19,8 @@ const industries = [
   'SaaS', 'IT Services', 'E-commerce', 'Restaurant', 'Other'
 ]
 
-export default function ClientDetailPage({ params }: { params: { id: string } }) {
+export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const router = useRouter()
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
@@ -31,7 +32,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   const [form, setForm] = useState({ name: '', industry: '', website: '' })
 
   useEffect(() => {
-    fetch(`/api/clients/${params.id}`)
+    fetch(`/api/clients/${id}`)
       .then(r => r.json())
       .then(data => {
         if (data.client) {
@@ -45,13 +46,13 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [params.id])
+  }, [id])
 
   async function handleSave() {
     if (!form.name) return
     setSaving(true)
     setError('')
-    const res = await fetch(`/api/clients/${params.id}`, {
+    const res = await fetch(`/api/clients/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -69,7 +70,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
 
   async function handleDelete() {
     setDeleting(true)
-    const res = await fetch(`/api/clients/${params.id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' })
     if (res.ok) {
       router.push('/dashboard/clients')
       router.refresh()
@@ -125,7 +126,6 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
       {sidebar}
-
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -136,23 +136,16 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
           <div style={{ display: 'flex', gap: '8px' }}>
             {!editing && (
               <>
-                <button onClick={() => setEditing(true)} style={{ background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-                  Edit
-                </button>
-                <button onClick={() => setShowDeleteConfirm(true)} style={{ background: 'transparent', color: '#DC2626', border: '0.5px solid #DC2626', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-                  Delete
-                </button>
+                <button onClick={() => setEditing(true)} style={{ background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Edit</button>
+                <button onClick={() => setShowDeleteConfirm(true)} style={{ background: 'transparent', color: '#DC2626', border: '0.5px solid #DC2626', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Delete</button>
               </>
             )}
           </div>
         </div>
 
         <div style={{ padding: '32px', maxWidth: '700px' }}>
-
           {error && (
-            <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>
-              {error}
-            </div>
+            <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>
           )}
 
           {showDeleteConfirm && (
@@ -163,16 +156,13 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                 <button onClick={handleDelete} disabled={deleting} style={{ background: '#DC2626', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                   {deleting ? 'Deleting...' : 'Yes, delete'}
                 </button>
-                <button onClick={() => setShowDeleteConfirm(false)} style={{ background: 'transparent', color: '#6B7280', border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-                  Cancel
-                </button>
+                <button onClick={() => setShowDeleteConfirm(false)} style={{ background: 'transparent', color: '#6B7280', border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Cancel</button>
               </div>
             </div>
           )}
 
           <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
             <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E', marginBottom: '20px' }}>Client details</h2>
-
             {editing ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
@@ -194,9 +184,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                   <button onClick={handleSave} disabled={saving || !form.name} style={{ background: saving || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                     {saving ? 'Saving...' : 'Save changes'}
                   </button>
-                  <button onClick={() => { setEditing(false); setForm({ name: client.name, industry: client.industry || '', website: client.website || '' }) }} style={{ background: 'transparent', color: '#6B7280', border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-                    Cancel
-                  </button>
+                  <button onClick={() => { setEditing(false); setForm({ name: client.name, industry: client.industry || '', website: client.website || '' }) }} style={{ background: 'transparent', color: '#6B7280', border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Cancel</button>
                 </div>
               </div>
             ) : (
@@ -229,7 +217,6 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
               ))}
             </div>
           </div>
-
         </div>
       </div>
     </div>
