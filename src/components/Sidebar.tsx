@@ -38,9 +38,9 @@ export default function Sidebar({ active, email }: SidebarProps) {
             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px' }}>{email}</div>
           </div>
         </div>
-        <Link href="/auth/signout" style={{ display: 'block', padding: '7px 12px', borderRadius: '6px', fontSize: '12px', color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>
-          Sign out
-        </Link>
+        <a href="/auth/signout" style={{ display: 'block', padding: '7px 12px', borderRadius: '6px', fontSize: '12px', color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>
+  Sign out
+</a>
       </div>
     </div>
   )
