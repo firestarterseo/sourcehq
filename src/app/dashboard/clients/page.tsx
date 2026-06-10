@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import Link from 'next/link'
+import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
 import Sidebar from '@/components/Sidebar'
 
 export default async function ClientsPage() {

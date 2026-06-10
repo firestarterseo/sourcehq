@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
+import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
 import Sidebar from '@/components/Sidebar'
 
 function ComingSoon({ title, description, icon }: { title: string, description: string, icon: string }) {

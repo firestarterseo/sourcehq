@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import Link from 'next/link'\nimport Sidebar from '@/components/Sidebar'
 
 const industries = [
   'HVAC', 'Plumbing', 'Roofing', 'Electrical', 'Windows & Doors',

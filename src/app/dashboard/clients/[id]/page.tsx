@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Sidebar from '@/components/Sidebar'
 
 interface Client {
   id: string
@@ -68,11 +69,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       body: JSON.stringify(form),
     })
     const data = await res.json()
-    if (!res.ok) {
-      setError(data.error || 'Failed to save')
-      setSaving(false)
-      return
-    }
+    if (!res.ok) { setError(data.error || 'Failed to save'); setSaving(false); return }
     setClient(data.client)
     setEditing(false)
     setSaving(false)
@@ -81,43 +78,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   async function handleDelete() {
     setDeleting(true)
     const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' })
-    if (res.ok) {
-      router.push('/dashboard/clients')
-      router.refresh()
-    } else {
-      setError('Failed to delete client')
-      setDeleting(false)
-      setShowDeleteConfirm(false)
-    }
+    if (res.ok) { router.push('/dashboard/clients'); router.refresh() }
+    else { setError('Failed to delete client'); setDeleting(false); setShowDeleteConfirm(false) }
   }
-
-  const sidebar = (
-    <div style={{ width: '220px', background: '#0D1B3E', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'fixed', top: 0, left: 0, height: '100vh' }}>
-      <div style={{ padding: '20px 16px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '700', color: '#fff', margin: 0 }}>
-          SOURCE <span style={{ color: '#A78BFA' }}>HQ</span>
-        </h1>
-      </div>
-      <nav style={{ padding: '8px', flex: 1 }}>
-        {[
-          { label: 'Dashboard', href: '/dashboard', active: false },
-          { label: 'Clients', href: '/dashboard/clients', active: true },
-          { label: 'Reports', href: '/dashboard', active: false },
-          { label: 'Connections', href: '/dashboard', active: false },
-          { label: 'Insights', href: '/dashboard', active: false },
-          { label: 'Settings', href: '/dashboard', active: false },
-        ].map(item => (
-          <Link key={item.label} href={item.href} style={{ display: 'block', padding: '8px 12px', borderRadius: '6px', margin: '1px 0', fontSize: '13px', fontWeight: '500', color: item.active ? '#C4B5FD' : 'rgba(255,255,255,0.5)', background: item.active ? 'rgba(109,40,217,0.15)' : 'transparent', textDecoration: 'none' }}>
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-    </div>
-  )
 
   if (loading) return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
-      {sidebar}
+      <Sidebar active="Clients" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: '#6B7280', fontSize: '14px' }}>Loading...</p>
       </div>
@@ -126,7 +93,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   if (!client) return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
-      {sidebar}
+      <Sidebar active="Clients" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: '#6B7280', fontSize: '14px' }}>Client not found. <Link href="/dashboard/clients" style={{ color: '#6D28D9' }}>Go back</Link></p>
       </div>
@@ -135,7 +102,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
-      {sidebar}
+      <Sidebar active="Clients" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -154,9 +121,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div style={{ padding: '32px', maxWidth: '700px' }}>
-          {error && (
-            <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>
-          )}
+          {error && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>}
 
           {showDeleteConfirm && (
             <div style={{ background: '#FEF2F2', border: '0.5px solid #FECACA', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
@@ -196,48 +161,3 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   </button>
                   <button onClick={() => { setEditing(false); setForm({ name: client.name, industry: client.industry || '', website: client.website || '' }) }} style={{ background: 'transparent', color: '#6B7280', border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Cancel</button>
                 </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {[
-                  { label: 'Client name', value: client.name },
-                  { label: 'Industry', value: client.industry || '—' },
-                  { label: 'Website', value: client.website || '—' },
-                  { label: 'Status', value: client.active ? 'Active' : 'Inactive' },
-                  { label: 'Added', value: new Date(client.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) },
-                ].map(row => (
-                  <div key={row.label} style={{ display: 'flex', gap: '16px', paddingBottom: '16px', borderBottom: '0.5px solid #F3F4F6' }}>
-                    <div style={{ width: '140px', flexShrink: 0, fontSize: '13px', color: '#9CA3AF', fontWeight: '500' }}>{row.label}</div>
-                    <div style={{ fontSize: '13px', color: '#0D1B3E' }}>{row.value}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
-            <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E', marginBottom: '8px' }}>Data connections</h2>
-            <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '16px' }}>Connect data sources to start generating SOURCE reports.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>Google (GSC, GA4, GBP, Ads)</div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>Search Console · Analytics · Business Profile · Ads</div>
-                </div>
-                <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
-                  Connect Google
-                </a>
-              </div>
-              {['CallRail', 'Ahrefs', 'SEMrush'].map(source => (
-                <div key={source} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>{source}</span>
-                  <span style={{ fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', background: '#F3F4F6', color: '#6B7280' }}>Not connected</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
