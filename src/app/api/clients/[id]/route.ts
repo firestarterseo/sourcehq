@@ -32,8 +32,6 @@ function adminClient() {
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { data: { session } } = await getSession()
-  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   const { data: client, error } = await adminClient()
     .from('clients')
