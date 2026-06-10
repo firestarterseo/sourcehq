@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 export default async function ConnectionsPage() {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
 if (!session) redirect('/')
 
   return (

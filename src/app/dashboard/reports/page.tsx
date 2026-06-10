@@ -18,7 +18,7 @@ function ComingSoon({ title, description, icon }: { title: string, description: 
 
 export default async function ReportsPage() {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
 if (!session) redirect('/')
 
   return (

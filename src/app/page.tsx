@@ -4,7 +4,7 @@ import Logo from '@/components/Logo'
 
 export default async function Home() {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
 if (session) redirect('/dashboard')
 
   return (
