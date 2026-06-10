@@ -15,8 +15,18 @@ interface Client {
 
 const industries = [
   'HVAC', 'Plumbing', 'Roofing', 'Electrical', 'Windows & Doors',
-  'Painting', 'Landscaping', 'Dental', 'Legal', 'Real Estate',
-  'SaaS', 'IT Services', 'E-commerce', 'Restaurant', 'Other'
+  'Painting', 'Landscaping', 'Pest Control', 'Cleaning Services',
+  'Dental', 'Medical', 'Chiropractic', 'Veterinary',
+  'Legal', 'Accounting', 'Financial Services',
+  'Real Estate', 'Mortgage',
+  'Restaurant', 'Hospitality',
+  'SaaS', 'IT Services', 'Cybersecurity',
+  'E-commerce', 'Retail',
+  'Digital Marketing / SEO', 'Advertising Agency',
+  'Construction', 'General Contractor',
+  'Auto Repair', 'Dealership',
+  'Education', 'Childcare',
+  'Other'
 ]
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
