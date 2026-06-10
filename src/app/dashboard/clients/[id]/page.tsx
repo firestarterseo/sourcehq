@@ -219,7 +219,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E', marginBottom: '8px' }}>Data connections</h2>
             <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '16px' }}>Connect data sources to start generating SOURCE reports.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {['Google Search Console', 'Google Analytics 4', 'Google Business Profile', 'Google Ads', 'CallRail', 'Ahrefs', 'SEMrush'].map(source => (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>Google (GSC, GA4, GBP, Ads)</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>Search Console · Analytics · Business Profile · Ads</div>
+                </div>
+                <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
+                  Connect Google
+                </a>
+              </div>
+              {['CallRail', 'Ahrefs', 'SEMrush'].map(source => (
                 <div key={source} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
                   <span style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>{source}</span>
                   <span style={{ fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', background: '#F3F4F6', color: '#6B7280' }}>Not connected</span>
