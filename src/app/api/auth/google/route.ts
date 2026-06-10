@@ -8,17 +8,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing clientId' }, { status: 400 })
   }
 
-  const googleClientId = process.env.GOOGLE_CLIENT_ID!
-  const redirectUri = `${process.env.NEXT_PUBLIC_SITE_URL}/api/auth/google/callback`
-
   const scopes = [
     'https://www.googleapis.com/auth/webmasters.readonly',
     'https://www.googleapis.com/auth/analytics.readonly',
   ].join(' ')
 
   const params = new URLSearchParams({
-    client_id: googleClientId,
-    redirect_uri: redirectUri,
+    client_id: process.env.GOOGLE_CLIENT_ID!,
+    redirect_uri: 'https://sourcehq.vercel.app/api/auth/google/callback',
     response_type: 'code',
     scope: scopes,
     access_type: 'offline',
