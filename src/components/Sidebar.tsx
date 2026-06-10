@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Logo from '@/components/Logo'
 
 interface SidebarProps {
   active: string
@@ -17,11 +18,9 @@ export default function Sidebar({ active, email }: SidebarProps) {
 
   return (
     <div style={{ width: '220px', background: '#0D1B3E', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 10 }}>
-      <div style={{ padding: '20px 16px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
+      <div style={{ padding: '16px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
         <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-          <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '700', color: '#fff', margin: 0, letterSpacing: '-0.01em' }}>
-            SOURCE <span style={{ color: '#A78BFA' }}>HQ</span>
-          </h1>
+          <Logo variant="dark" size="sm" />
         </Link>
       </div>
       <nav style={{ padding: '8px', flex: 1 }}>
