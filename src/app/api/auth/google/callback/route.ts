@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
+const BASE_URL = 'https://sourcehq.vercel.app'
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
@@ -8,9 +10,7 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
 
   if (error || !code || !clientId) {
-    return NextResponse.redirect(
-      new URL(`/dashboard/clients/${clientId}?error=google_auth_failed`, process.env.NEXT_PUBLIC_SITE_URL!)
-    )
+    return NextResponse.redirect(`${BASE_URL}/dashboard/clients/${clientId}?error=google_auth_failed`)
   }
 
   try {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         code,
         client_id: process.env.GOOGLE_CLIENT_ID!,
         client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri: `${process.env.NEXT_PUBLIC_SITE_URL}/api/auth/google/callback`,
+        redirect_uri: `${BASE_URL}/api/auth/google/callback`,
         grant_type: 'authorization_code',
       }),
     })
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const tokens = await tokenRes.json()
 
     if (!tokens.access_token) {
-      throw new Error('No access token received')
+      throw new Error(`No access token received: ${JSON.stringify(tokens)}`)
     }
 
     const adminSupabase = createClient(
@@ -50,19 +50,13 @@ export async function GET(request: NextRequest) {
           expires_at: Date.now() + (tokens.expires_in * 1000),
         },
         last_synced: new Date().toISOString(),
-      }, {
-        onConflict: 'client_id,source_type',
-      })
+      }, { onConflict: 'client_id,source_type' })
 
     if (upsertError) throw upsertError
 
-    return NextResponse.redirect(
-      new URL(`/dashboard/clients/${clientId}?connected=google`, process.env.NEXT_PUBLIC_SITE_URL!)
-    )
+    return NextResponse.redirect(`${BASE_URL}/dashboard/clients/${clientId}?connected=google`)
   } catch (err: any) {
     console.error('Google OAuth callback error:', err)
-    return NextResponse.redirect(
-      new URL(`/dashboard/clients/${clientId}?error=token_exchange_failed`, process.env.NEXT_PUBLIC_SITE_URL!)
-    )
+    return NextResponse.redirect(`${BASE_URL}/dashboard/clients/${clientId}?error=token_exchange_failed`)
   }
 }
