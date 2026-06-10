@@ -17,7 +17,7 @@ export async function createServerSupabaseClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Ignore cookie setting errors in Server Components
+            // Silently ignore - expected in Server Components
           }
         },
       },
