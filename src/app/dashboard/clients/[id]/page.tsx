@@ -58,6 +58,22 @@ interface Ga4Data {
   channels?: { channel: string; sessions: number }[]
 }
 
+interface CallRailData {
+  connected: boolean
+  error?: string
+  accountName?: string
+  summary?: {
+    totalCalls: number
+    answered: number
+    missed: number
+    firstTime: number
+    avgDurationSec: number
+    period: string
+  }
+  daily?: { date: string; calls: number }[]
+  sources?: { source: string; calls: number }[]
+}
+
 interface PropertyOptions {
   connected: boolean
   gscSites?: string[]
@@ -101,7 +117,7 @@ function BarChart({ title, data }: { title: string; data: { date: string; value:
               height: `${Math.max((d.value / max) * 100, 2)}%`,
               background: '#6D28D9',
               borderRadius: '3px 3px 0 0',
-              minWidth: '4px',
+              minWidth: '2px',
               cursor: 'default',
               opacity: 0.85,
             }}
@@ -118,7 +134,7 @@ function BarChart({ title, data }: { title: string; data: { date: string; value:
 
 function StatCards({ stats }: { stats: { label: string; value: string }[] }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: '12px', marginBottom: '24px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(stats.length, 4)}, 1fr)`, gap: '12px', marginBottom: '24px' }}>
       {stats.map(stat => (
         <div key={stat.label} style={{ background: '#EDE9FE', borderRadius: '10px', padding: '16px' }}>
           <div style={{ fontSize: '11px', fontWeight: '500', color: '#6D28D9', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{stat.label}</div>
@@ -181,6 +197,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [selGsc, setSelGsc] = useState('')
   const [selGa4, setSelGa4] = useState('')
   const [savingProps, setSavingProps] = useState(false)
+  const [callrail, setCallrail] = useState<CallRailData | null>(null)
+  const [showCallrailForm, setShowCallrailForm] = useState(false)
+  const [callrailKey, setCallrailKey] = useState('')
+  const [callrailSaving, setCallrailSaving] = useState(false)
+  const [callrailError, setCallrailError] = useState('')
 
   function loadData() {
     fetch(`/api/clients/${id}/gsc`)
@@ -201,6 +222,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         if (data.selected?.ga4) setSelGa4(data.selected.ga4)
       })
       .catch(() => setOptions(null))
+
+    fetch(`/api/clients/${id}/callrail`)
+      .then(r => r.json())
+      .then(data => setCallrail(data))
+      .catch(() => setCallrail(null))
   }
 
   useEffect(() => {
@@ -242,6 +268,36 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     setSavingProps(false)
   }
 
+  async function handleConnectCallrail() {
+    if (!callrailKey.trim()) return
+    setCallrailSaving(true)
+    setCallrailError('')
+    const res = await fetch(`/api/clients/${id}/callrail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: callrailKey.trim() }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setCallrailError(data.error || 'Failed to connect')
+      setCallrailSaving(false)
+      return
+    }
+    setCallrailKey('')
+    setShowCallrailForm(false)
+    setCallrailSaving(false)
+    setCallrail(null)
+    fetch(`/api/clients/${id}/callrail`)
+      .then(r => r.json())
+      .then(data => setCallrail(data))
+      .catch(() => setCallrail(null))
+  }
+
+  async function handleDisconnectCallrail() {
+    await fetch(`/api/clients/${id}/callrail`, { method: 'DELETE' })
+    setCallrail({ connected: false })
+  }
+
   async function handleSave() {
     if (!form.name) return
     setSaving(true)
@@ -266,7 +322,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   }
 
   const isConnected = !!gsc?.connected
+  const crConnected = !!callrail?.connected
   const fmt = (n: number) => n.toLocaleString('en-US')
+  const fmtDuration = (sec: number) => {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
   const selectionDirty =
     (selGsc || '') !== (options?.selected?.gsc || '') ||
     (selGa4 || '') !== (options?.selected?.ga4 || '')
@@ -419,7 +481,53 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   </div>
                 )}
               </div>
-              {['CallRail', 'Ahrefs', 'SEMrush'].map(source => (
+
+              <div style={{ padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: crConnected ? '#10B981' : '#D1D5DB', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>CallRail</div>
+                      <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+                        {crConnected ? `Connected${callrail?.accountName ? ` · ${callrail.accountName}` : ''}` : 'Call tracking & attribution'}
+                      </div>
+                    </div>
+                  </div>
+                  {crConnected ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46' }}>Connected</span>
+                      <button onClick={handleDisconnectCallrail} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '11px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', textDecoration: 'underline' }}>Disconnect</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
+                      Connect CallRail
+                    </button>
+                  )}
+                </div>
+
+                {!crConnected && showCallrailForm && (
+                  <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '0.5px solid #F3F4F6', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {callrailError && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#991B1B' }}>{callrailError}</div>}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>CallRail API key</label>
+                      <input
+                        type="password"
+                        value={callrailKey}
+                        onChange={e => setCallrailKey(e.target.value)}
+                        placeholder="Paste the API key from CallRail Settings → Integrations"
+                        style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
+                      />
+                    </div>
+                    <div>
+                      <button onClick={handleConnectCallrail} disabled={callrailSaving || !callrailKey.trim()} style={{ background: callrailSaving || !callrailKey.trim() ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
+                        {callrailSaving ? 'Verifying...' : 'Save & connect'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {['Ahrefs', 'SEMrush'].map(source => (
                 <div key={source} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
                   <span style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>{source}</span>
                   <span style={{ fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', background: '#F3F4F6', color: '#6B7280' }}>Not connected</span>
@@ -465,7 +573,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           )}
 
           {isConnected && (
-            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                 <div>
                   <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E' }}>Traffic</h2>
@@ -497,6 +605,40 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 </>
               ) : (
                 <p style={{ fontSize: '13px', color: '#6B7280' }}>No traffic data available.</p>
+              )}
+            </div>
+          )}
+
+          {crConnected && (
+            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E' }}>Calls</h2>
+                  {callrail?.accountName && <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{callrail.accountName}</span>}
+                </div>
+                {callrail?.summary && <span style={{ fontSize: '12px', color: '#9CA3AF' }}>{callrail.summary.period}</span>}
+              </div>
+
+              {callrail?.error ? (
+                <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#92400E' }}>{callrail.error}</div>
+              ) : callrail?.summary ? (
+                <>
+                  <StatCards stats={[
+                    { label: 'Total calls', value: fmt(callrail.summary.totalCalls) },
+                    { label: 'Answered', value: fmt(callrail.summary.answered) },
+                    { label: 'First-time callers', value: fmt(callrail.summary.firstTime) },
+                    { label: 'Avg duration', value: fmtDuration(callrail.summary.avgDurationSec) },
+                  ]} />
+
+                  <BarChart title="Calls by day" data={(callrail.daily || []).map(d => ({ date: d.date, value: d.calls }))} />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    <SimpleTable title="Call sources" rows={(callrail.sources || []).map(r => ({ label: r.source, value: r.calls }))} />
+                    <div />
+                  </div>
+                </>
+              ) : (
+                <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading call data...</p>
               )}
             </div>
           )}
