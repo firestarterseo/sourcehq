@@ -34,7 +34,11 @@ export async function GET(_: NextRequest) {
       })
       if (res.ok) {
         const json = await res.json()
-        callrail = { configured: true, accountName: json.accounts?.[0]?.name }
+        const accounts = json.accounts || []
+        callrail = {
+          configured: true,
+          accountName: accounts.length === 1 ? accounts[0]?.name : `${accounts.length} accounts`,
+        }
       }
     } catch {}
   }
