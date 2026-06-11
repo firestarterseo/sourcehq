@@ -26,7 +26,6 @@ export async function GET(_: NextRequest) {
 
   const google = await getAgencyGoogleStatus()
 
-  // CallRail agency key lives in env; verify it actually works
   let callrail: { configured: boolean; accountName?: string } = { configured: false }
   if (process.env.CALLRAIL_AGENCY_KEY) {
     try {
