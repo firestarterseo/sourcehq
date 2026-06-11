@@ -6,8 +6,9 @@ import { Suspense } from 'react'
 import Sidebar from '@/components/Sidebar'
 
 interface AgencyStatus {
-  google: { connected: boolean; email: string | null }
-  callrail: { configured: boolean; accountName?: string }
+  google?: { connected?: boolean; email?: string | null }
+  callrail?: { configured?: boolean; accountName?: string }
+  error?: string
 }
 
 function ConnectionRow({
@@ -47,13 +48,29 @@ function ConnectionsContent() {
   const justConnected = searchParams.get('connected')
   const errorParam = searchParams.get('error')
   const [status, setStatus] = useState<AgencyStatus | null>(null)
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     fetch('/api/agency/connections')
-      .then(r => r.json())
-      .then(setStatus)
-      .catch(() => setStatus(null))
+      .then(async r => {
+        const data = await r.json().catch(() => ({}))
+        if (!r.ok) {
+          setLoadError(data?.error || `Status check failed (${r.status})`)
+          setStatus({})
+          return
+        }
+        setStatus(data || {})
+      })
+      .catch(() => {
+        setLoadError('Could not reach the server')
+        setStatus({})
+      })
   }, [])
+
+  const googleConnected = !!status?.google?.connected
+  const googleEmail = status?.google?.email || null
+  const callrailConfigured = !!status?.callrail?.configured
+  const callrailName = status?.callrail?.accountName || null
 
   return (
     <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6', minHeight: '100vh' }}>
@@ -72,6 +89,11 @@ function ConnectionsContent() {
             Google connection failed ({errorParam}). Try again.
           </div>
         )}
+        {loadError && (
+          <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#92400E' }}>
+            {loadError} — connection status may be out of date. Try refreshing, or signing out and back in.
+          </div>
+        )}
 
         <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '20px', fontWeight: '600', color: '#0D1B3E', marginBottom: '6px' }}>Agency connections</h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '20px' }}>
@@ -82,11 +104,11 @@ function ConnectionsContent() {
           <ConnectionRow
             name="Google (GSC, GA4, GBP, Ads)"
             description="Connect Firestarter's Google account — covers every client property it can access"
-            connected={!!status?.google.connected}
-            detail={status?.google.email ? `Connected as ${status.google.email}` : null}
+            connected={googleConnected}
+            detail={googleEmail ? `Connected as ${googleEmail}` : null}
             action={
-              <a href="/api/auth/google-agency" style={{ background: status?.google.connected ? 'transparent' : '#6D28D9', color: status?.google.connected ? '#6D28D9' : '#fff', border: status?.google.connected ? '0.5px solid #6D28D9' : 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '500', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
-                {status?.google.connected ? 'Reconnect' : 'Connect Google'}
+              <a href="/api/auth/google-agency" style={{ background: googleConnected ? 'transparent' : '#6D28D9', color: googleConnected ? '#6D28D9' : '#fff', border: googleConnected ? '0.5px solid #6D28D9' : 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '500', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
+                {googleConnected ? 'Reconnect' : 'Connect Google'}
               </a>
             }
           />
@@ -94,8 +116,8 @@ function ConnectionsContent() {
           <ConnectionRow
             name="CallRail"
             description="Agency API key — set as CALLRAIL_AGENCY_KEY in Vercel environment variables"
-            connected={!!status?.callrail.configured}
-            detail={status?.callrail.accountName ? `Connected · ${status.callrail.accountName}` : null}
+            connected={callrailConfigured}
+            detail={callrailName ? `Connected · ${callrailName}` : null}
           />
 
           <ConnectionRow name="Ahrefs" description="Coming soon — agency API key" connected={false} />
