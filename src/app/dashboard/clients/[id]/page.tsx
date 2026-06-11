@@ -74,6 +74,13 @@ interface CallRailData {
   sources?: { source: string; calls: number }[]
 }
 
+interface CallRailCompanies {
+  available: boolean
+  error?: string
+  accountName?: string
+  companies?: { id: string; name: string }[]
+}
+
 interface PropertyOptions {
   connected: boolean
   gscSites?: string[]
@@ -179,6 +186,18 @@ const selectStyle = {
   background: '#fff',
 } as const
 
+const inputStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '0.5px solid #E5E5E3',
+  borderRadius: '8px',
+  fontSize: '13px',
+  color: '#0D1B3E',
+  fontFamily: 'DM Sans, sans-serif',
+  outline: 'none',
+  background: '#fff',
+} as const
+
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
@@ -198,10 +217,20 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [selGa4, setSelGa4] = useState('')
   const [savingProps, setSavingProps] = useState(false)
   const [callrail, setCallrail] = useState<CallRailData | null>(null)
+  const [crCompanies, setCrCompanies] = useState<CallRailCompanies | null>(null)
   const [showCallrailForm, setShowCallrailForm] = useState(false)
+  const [crMode, setCrMode] = useState<'agency' | 'standalone'>('agency')
+  const [crCompanyId, setCrCompanyId] = useState('')
   const [callrailKey, setCallrailKey] = useState('')
   const [callrailSaving, setCallrailSaving] = useState(false)
   const [callrailError, setCallrailError] = useState('')
+
+  function loadCallrail() {
+    fetch(`/api/clients/${id}/callrail`)
+      .then(r => r.json())
+      .then(data => setCallrail(data))
+      .catch(() => setCallrail(null))
+  }
 
   function loadData() {
     fetch(`/api/clients/${id}/gsc`)
@@ -223,10 +252,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       })
       .catch(() => setOptions(null))
 
-    fetch(`/api/clients/${id}/callrail`)
+    loadCallrail()
+
+    fetch(`/api/clients/${id}/callrail/companies`)
       .then(r => r.json())
-      .then(data => setCallrail(data))
-      .catch(() => setCallrail(null))
+      .then(data => setCrCompanies(data))
+      .catch(() => setCrCompanies(null))
   }
 
   useEffect(() => {
@@ -269,13 +300,23 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   }
 
   async function handleConnectCallrail() {
-    if (!callrailKey.trim()) return
     setCallrailSaving(true)
     setCallrailError('')
+
+    let body: any
+    if (crMode === 'agency') {
+      if (!crCompanyId) { setCallrailSaving(false); return }
+      const company = crCompanies?.companies?.find(c => c.id === crCompanyId)
+      body = { company_id: crCompanyId, company_name: company?.name || null }
+    } else {
+      if (!callrailKey.trim()) { setCallrailSaving(false); return }
+      body = { api_key: callrailKey.trim() }
+    }
+
     const res = await fetch(`/api/clients/${id}/callrail`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: callrailKey.trim() }),
+      body: JSON.stringify(body),
     })
     const data = await res.json()
     if (!res.ok) {
@@ -284,13 +325,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       return
     }
     setCallrailKey('')
+    setCrCompanyId('')
     setShowCallrailForm(false)
     setCallrailSaving(false)
     setCallrail(null)
-    fetch(`/api/clients/${id}/callrail`)
-      .then(r => r.json())
-      .then(data => setCallrail(data))
-      .catch(() => setCallrail(null))
+    loadCallrail()
   }
 
   async function handleDisconnectCallrail() {
@@ -393,7 +432,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Client name *</label>
-                  <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
+                  <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Industry</label>
@@ -404,7 +443,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Website</label>
-                  <input type="text" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
+                  <input type="text" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={inputStyle} />
                 </div>
                 <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
                   <button onClick={handleSave} disabled={saving || !form.name} style={{ background: saving || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
@@ -506,21 +545,52 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 </div>
 
                 {!crConnected && showCallrailForm && (
-                  <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '0.5px solid #F3F4F6', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '0.5px solid #F3F4F6', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {callrailError && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#991B1B' }}>{callrailError}</div>}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>CallRail API key</label>
-                      <input
-                        type="password"
-                        value={callrailKey}
-                        onChange={e => setCallrailKey(e.target.value)}
-                        placeholder="Paste the API key from CallRail Settings → Integrations"
-                        style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}
-                      />
+
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0D1B3E', cursor: 'pointer' }}>
+                        <input type="radio" checked={crMode === 'agency'} onChange={() => setCrMode('agency')} />
+                        Firestarter CallRail account
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0D1B3E', cursor: 'pointer' }}>
+                        <input type="radio" checked={crMode === 'standalone'} onChange={() => setCrMode('standalone')} />
+                        Client has their own CallRail
+                      </label>
                     </div>
+
+                    {crMode === 'agency' ? (
+                      crCompanies?.available ? (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>CallRail company</label>
+                          <select value={crCompanyId} onChange={e => setCrCompanyId(e.target.value)} style={selectStyle}>
+                            <option value="">Select a company...</option>
+                            {(crCompanies.companies || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: '12px', color: '#92400E' }}>{crCompanies?.error || 'Loading companies...'}</p>
+                      )
+                    ) : (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Client&apos;s CallRail API key</label>
+                        <input
+                          type="password"
+                          value={callrailKey}
+                          onChange={e => setCallrailKey(e.target.value)}
+                          placeholder="From their CallRail Settings → Integrations"
+                          style={inputStyle}
+                        />
+                      </div>
+                    )}
+
                     <div>
-                      <button onClick={handleConnectCallrail} disabled={callrailSaving || !callrailKey.trim()} style={{ background: callrailSaving || !callrailKey.trim() ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-                        {callrailSaving ? 'Verifying...' : 'Save & connect'}
+                      <button
+                        onClick={handleConnectCallrail}
+                        disabled={callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim())}
+                        style={{ background: callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim()) ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+                      >
+                        {callrailSaving ? 'Connecting...' : 'Save & connect'}
                       </button>
                     </div>
                   </div>
