@@ -26,6 +26,7 @@ interface GscRow {
 interface GscData {
   connected: boolean
   revoked?: boolean
+  needsSelection?: boolean
   error?: string
   property?: string
   summary?: {
@@ -43,6 +44,7 @@ interface GscData {
 interface Ga4Data {
   connected: boolean
   revoked?: boolean
+  needsSelection?: boolean
   error?: string
   propertyName?: string
   summary?: {
@@ -54,6 +56,13 @@ interface Ga4Data {
   daily?: { date: string; sessions: number }[]
   topPages?: { page: string; sessions: number }[]
   channels?: { channel: string; sessions: number }[]
+}
+
+interface PropertyOptions {
+  connected: boolean
+  gscSites?: string[]
+  ga4Properties?: { id: string; name: string }[]
+  selected?: { gsc: string | null; ga4: string | null }
 }
 
 const industries = [
@@ -142,6 +151,18 @@ function SimpleTable({ title, rows }: { title: string; rows: { label: string; va
   )
 }
 
+const selectStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '0.5px solid #E5E5E3',
+  borderRadius: '8px',
+  fontSize: '13px',
+  color: '#0D1B3E',
+  fontFamily: 'DM Sans, sans-serif',
+  outline: 'none',
+  background: '#fff',
+} as const
+
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
@@ -156,6 +177,31 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [gsc, setGsc] = useState<GscData | null>(null)
   const [gscLoading, setGscLoading] = useState(true)
   const [ga4, setGa4] = useState<Ga4Data | null>(null)
+  const [options, setOptions] = useState<PropertyOptions | null>(null)
+  const [selGsc, setSelGsc] = useState('')
+  const [selGa4, setSelGa4] = useState('')
+  const [savingProps, setSavingProps] = useState(false)
+
+  function loadData() {
+    fetch(`/api/clients/${id}/gsc`)
+      .then(r => r.json())
+      .then(data => { setGsc(data); setGscLoading(false) })
+      .catch(() => { setGsc(null); setGscLoading(false) })
+
+    fetch(`/api/clients/${id}/ga4`)
+      .then(r => r.json())
+      .then(data => setGa4(data))
+      .catch(() => setGa4(null))
+
+    fetch(`/api/clients/${id}/google-properties`)
+      .then(r => r.json())
+      .then(data => {
+        setOptions(data)
+        if (data.selected?.gsc) setSelGsc(data.selected.gsc)
+        if (data.selected?.ga4) setSelGa4(data.selected.ga4)
+      })
+      .catch(() => setOptions(null))
+  }
 
   useEffect(() => {
     fetch(`/api/clients/${id}`)
@@ -173,16 +219,28 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       })
       .catch(() => setLoading(false))
 
-    fetch(`/api/clients/${id}/gsc`)
-      .then(r => r.json())
-      .then(data => { setGsc(data); setGscLoading(false) })
-      .catch(() => { setGsc(null); setGscLoading(false) })
-
-    fetch(`/api/clients/${id}/ga4`)
-      .then(r => r.json())
-      .then(data => setGa4(data))
-      .catch(() => setGa4(null))
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  async function handleSaveProperties() {
+    setSavingProps(true)
+    const ga4Name = options?.ga4Properties?.find(p => p.id === selGa4)?.name || null
+    await fetch(`/api/clients/${id}/google-properties`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gsc_property: selGsc || null,
+        ga4_property: selGa4 || null,
+        ga4_property_name: ga4Name,
+      }),
+    })
+    setGscLoading(true)
+    setGsc(null)
+    setGa4(null)
+    loadData()
+    setSavingProps(false)
+  }
 
   async function handleSave() {
     if (!form.name) return
@@ -209,6 +267,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   const isConnected = !!gsc?.connected
   const fmt = (n: number) => n.toLocaleString('en-US')
+  const selectionDirty =
+    (selGsc || '') !== (options?.selected?.gsc || '') ||
+    (selGa4 || '') !== (options?.selected?.ga4 || '')
 
   if (loading) return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
@@ -274,7 +335,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Industry</label>
-                  <select value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}>
+                  <select value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} style={selectStyle}>
                     <option value="">Select industry...</option>
                     {industries.map(i => <option key={i} value={i}>{i}</option>)}
                   </select>
@@ -312,22 +373,50 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E', marginBottom: '8px' }}>Data connections</h2>
             <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '16px' }}>Connect data sources to start generating SOURCE reports.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isConnected ? '#10B981' : '#D1D5DB', flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>Google (GSC, GA4, GBP, Ads)</div>
-                    <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
-                      {gscLoading ? 'Checking connection...' : isConnected ? (gsc?.property ? `Connected · ${gsc.property}` : 'Connected') : gsc?.revoked ? 'Access revoked — reconnect needed' : 'Search Console · Analytics · Business Profile · Ads'}
+              <div style={{ padding: '12px 16px', border: '0.5px solid #E5E5E3', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isConnected ? '#10B981' : '#D1D5DB', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>Google (GSC, GA4, GBP, Ads)</div>
+                      <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+                        {gscLoading ? 'Checking connection...' : isConnected ? 'Connected' : gsc?.revoked ? 'Access revoked — reconnect needed' : 'Search Console · Analytics · Business Profile · Ads'}
+                      </div>
                     </div>
                   </div>
+                  {isConnected ? (
+                    <span style={{ fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46' }}>Connected</span>
+                  ) : (
+                    <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
+                      {gsc?.revoked ? 'Reconnect Google' : 'Connect Google'}
+                    </a>
+                  )}
                 </div>
-                {isConnected ? (
-                  <span style={{ fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46' }}>Connected</span>
-                ) : (
-                  <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
-                    {gsc?.revoked ? 'Reconnect Google' : 'Connect Google'}
-                  </a>
+
+                {isConnected && options?.connected && (
+                  <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '0.5px solid #F3F4F6', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Search Console property</label>
+                      <select value={selGsc} onChange={e => setSelGsc(e.target.value)} style={selectStyle}>
+                        <option value="">Select a property...</option>
+                        {(options.gscSites || []).map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Analytics (GA4) property</label>
+                      <select value={selGa4} onChange={e => setSelGa4(e.target.value)} style={selectStyle}>
+                        <option value="">Select a property...</option>
+                        {(options.ga4Properties || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    {selectionDirty && (
+                      <div>
+                        <button onClick={handleSaveProperties} disabled={savingProps} style={{ background: savingProps ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
+                          {savingProps ? 'Saving...' : 'Save & reload data'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               {['CallRail', 'Ahrefs', 'SEMrush'].map(source => (
@@ -342,11 +431,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {isConnected && (
             <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E' }}>Search Console</h2>
+                <div>
+                  <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E' }}>Search Console</h2>
+                  {gsc?.property && <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{gsc.property}</span>}
+                </div>
                 {gsc?.summary && <span style={{ fontSize: '12px', color: '#9CA3AF' }}>{gsc.summary.period}</span>}
               </div>
 
-              {gsc?.error ? (
+              {gsc?.needsSelection ? (
+                <p style={{ fontSize: '13px', color: '#6B7280' }}>Choose a Search Console property above to load data.</p>
+              ) : gsc?.error ? (
                 <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#92400E' }}>{gsc.error}</div>
               ) : gsc?.summary ? (
                 <>
@@ -382,6 +476,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
               {!ga4 ? (
                 <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading traffic data...</p>
+              ) : ga4.needsSelection ? (
+                <p style={{ fontSize: '13px', color: '#6B7280' }}>Choose an Analytics property above to load data.</p>
               ) : ga4.error ? (
                 <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#92400E' }}>{ga4.error}</div>
               ) : ga4.summary ? (
