@@ -74,11 +74,18 @@ interface CallRailData {
   sources?: { source: string; calls: number }[]
 }
 
+interface CallRailCompany {
+  id: string
+  name: string
+  accountId: string
+  accountName: string
+}
+
 interface CallRailCompanies {
   available: boolean
   error?: string
-  accountName?: string
-  companies?: { id: string; name: string }[]
+  accounts?: { id: string; name: string }[]
+  companies?: CallRailCompany[]
 }
 
 interface PropertyOptions {
@@ -306,8 +313,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     let body: any
     if (crMode === 'agency') {
       if (!crCompanyId) { setCallrailSaving(false); return }
-      const company = crCompanies?.companies?.find(c => c.id === crCompanyId)
-      body = { company_id: crCompanyId, company_name: company?.name || null }
+      const company = (crCompanies?.companies || []).find(c => c.id === crCompanyId)
+      body = { company_id: crCompanyId, company_name: company?.name || null, account_id: company?.accountId || null }
     } else {
       if (!callrailKey.trim()) { setCallrailSaving(false); return }
       body = { api_key: callrailKey.trim() }
@@ -551,7 +558,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <div style={{ display: 'flex', gap: '16px' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0D1B3E', cursor: 'pointer' }}>
                         <input type="radio" checked={crMode === 'agency'} onChange={() => setCrMode('agency')} />
-                        Firestarter CallRail account
+                        Firestarter CallRail access
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0D1B3E', cursor: 'pointer' }}>
                         <input type="radio" checked={crMode === 'standalone'} onChange={() => setCrMode('standalone')} />
@@ -565,7 +572,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                           <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>CallRail company</label>
                           <select value={crCompanyId} onChange={e => setCrCompanyId(e.target.value)} style={selectStyle}>
                             <option value="">Select a company...</option>
-                            {(crCompanies.companies || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {(crCompanies.companies || []).map(c => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}{(crCompanies.accounts || []).length > 1 ? ` — ${c.accountName}` : ''}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       ) : (
