@@ -23,6 +23,12 @@ interface GscRow {
   position: string
 }
 
+interface GscDay {
+  date: string
+  clicks: number
+  impressions: number
+}
+
 interface GscData {
   connected: boolean
   revoked?: boolean
@@ -35,6 +41,7 @@ interface GscData {
     position: string
     period: string
   }
+  daily?: GscDay[]
   topQueries?: GscRow[]
   topPages?: GscRow[]
 }
@@ -54,6 +61,41 @@ const industries = [
   'Education', 'Childcare',
   'Other'
 ]
+
+function TrendChart({ daily }: { daily: GscDay[] }) {
+  if (!daily || daily.length === 0) return null
+  const max = Math.max(...daily.map(d => d.clicks), 1)
+  const fmtDate = (d: string) => {
+    const dt = new Date(d + 'T00:00:00')
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#0D1B3E', marginBottom: '10px' }}>Clicks by day</h3>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '120px', padding: '12px', background: '#FAFAF8', borderRadius: '10px', border: '0.5px solid #F3F4F6' }}>
+        {daily.map(d => (
+          <div
+            key={d.date}
+            title={`${fmtDate(d.date)}: ${d.clicks.toLocaleString('en-US')} clicks, ${d.impressions.toLocaleString('en-US')} impressions`}
+            style={{
+              flex: 1,
+              height: `${Math.max((d.clicks / max) * 100, 2)}%`,
+              background: '#6D28D9',
+              borderRadius: '3px 3px 0 0',
+              minWidth: '4px',
+              cursor: 'default',
+              opacity: 0.85,
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', padding: '0 12px' }}>
+        <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{fmtDate(daily[0].date)}</span>
+        <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{fmtDate(daily[daily.length - 1].date)}</span>
+      </div>
+    </div>
+  )
+}
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -270,6 +312,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       </div>
                     ))}
                   </div>
+
+                  <TrendChart daily={gsc.daily || []} />
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                     {[
