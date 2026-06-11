@@ -76,7 +76,18 @@ async function refreshTokenIfNeeded(credentials: any, clientId: string) {
   return tokens.access_token
 }
 
-// Find which GA4 property belongs to this client's website
+function extractHostname(url: string) {
+  return url
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/^www\./, '')
+    .toLowerCase()
+}
+
+// Find which GA4 property belongs to this client's website.
+// Prefers an EXACT hostname match (firestarterseo.com), and only
+// falls back to a partial match (offers.firestarterseo.com) if
+// no exact match exists.
 async function resolveGa4Property(token: string, website: string) {
   const res = await fetch(`${ADMIN_API}/accountSummaries?pageSize=200`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -91,28 +102,30 @@ async function resolveGa4Property(token: string, website: string) {
     }
   }
   if (properties.length === 0) return null
-  if (properties.length === 1) return properties[0]
 
-  const hostname = website
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '')
-    .replace(/^www\./, '')
-    .toLowerCase()
+  const targetHost = extractHostname(website)
+  let partialMatch: { property: string; displayName: string } | null = null
 
-  // Check each property's web streams for a matching site URL
-  for (const p of properties.slice(0, 25)) {
+  for (const p of properties.slice(0, 50)) {
     const streamsRes = await fetch(`${ADMIN_API}/${p.property}/dataStreams`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!streamsRes.ok) continue
     const streams = await streamsRes.json()
     for (const s of streams.dataStreams || []) {
-      const uri = (s.webStreamData?.defaultUri || '').toLowerCase()
-      if (uri.includes(hostname)) return p
+      const streamUri = s.webStreamData?.defaultUri || ''
+      if (!streamUri) continue
+      const streamHost = extractHostname(streamUri)
+      if (streamHost === targetHost) {
+        return p // exact match — done
+      }
+      if (!partialMatch && streamHost.includes(targetHost)) {
+        partialMatch = p // remember as backup, keep looking for exact
+      }
     }
   }
 
-  return null
+  return partialMatch
 }
 
 async function runReport(token: string, property: string, body: Record<string, unknown>) {
