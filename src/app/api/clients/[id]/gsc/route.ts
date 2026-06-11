@@ -1,8 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { getGoogleAuth, saveGoogleSelection } from '@/lib/google-auth'
 
+const ADMIN_API = 'https://analyticsadmin.googleapis.com/v1beta'
 const GSC_API = 'https://searchconsole.googleapis.com/webmasters/v3'
 
 async function getSession() {
@@ -22,171 +23,64 @@ async function getSession() {
   return supabase.auth.getSession()
 }
 
-function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-}
-
-async function refreshTokenIfNeeded(credentials: any, clientId: string) {
-  if (Date.now() < credentials.expires_at - 60000) {
-    return credentials.access_token
-  }
-
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      refresh_token: credentials.refresh_token,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      grant_type: 'refresh_token',
-    }),
-  })
-
-  const tokens = await res.json()
-
-  if (!tokens.access_token) {
-    if (tokens.error === 'invalid_grant') {
-      await adminClient()
-        .from('data_connections')
-        .update({ status: 'disconnected' })
-        .eq('client_id', clientId)
-        .eq('source_type', 'google')
-      throw new Error('REVOKED')
-    }
-    throw new Error(`Failed to refresh token: ${tokens.error ?? 'unknown'}`)
-  }
-
-  const newCredentials = {
-    ...credentials,
-    access_token: tokens.access_token,
-    expires_at: Date.now() + (tokens.expires_in * 1000),
-  }
-
-  await adminClient()
-    .from('data_connections')
-    .update({ credentials: newCredentials })
-    .eq('client_id', clientId)
-    .eq('source_type', 'google')
-
-  return tokens.access_token
-}
-
-async function gscQuery(token: string, property: string, body: Record<string, unknown>) {
-  const res = await fetch(
-    `${GSC_API}/sites/${encodeURIComponent(property)}/searchAnalytics/query`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    }
-  )
-  const json = await res.json()
-  if (!res.ok) {
-    const err: any = new Error(json?.error?.message ?? `GSC ${res.status}`)
-    err.status = res.status
-    throw err
-  }
-  return json
-}
-
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  const { data: connection } = await adminClient()
-    .from('data_connections')
-    .select('credentials, status')
-    .eq('client_id', id)
-    .eq('source_type', 'google')
-    .single()
-
-  if (!connection || connection.status !== 'connected') {
+  const auth = await getGoogleAuth(id)
+  if (!auth.token) {
     return NextResponse.json({ connected: false })
   }
 
-  // Use the property chosen by the user — no more guessing
-  const property = connection.credentials.gsc_property
-  if (!property) {
-    return NextResponse.json({ connected: true, needsSelection: true })
-  }
-
   try {
-    const accessToken = await refreshTokenIfNeeded(connection.credentials, id)
+    const gscRes = await fetch(`${GSC_API}/sites`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+    })
+    const gscJson = gscRes.ok ? await gscRes.json() : { siteEntry: [] }
+    const gscSites = (gscJson.siteEntry || [])
+      .filter((s: any) => s.permissionLevel !== 'siteUnverifiedUser')
+      .map((s: any) => s.siteUrl)
+      .sort()
 
-    // GSC data lags ~2 days; end the window there to avoid trailing zeros
-    const end = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-    const start = new Date(end.getTime() - 28 * 24 * 60 * 60 * 1000)
-    const startDate = start.toISOString().split('T')[0]
-    const endDate = end.toISOString().split('T')[0]
-    const range = { startDate, endDate }
-
-    const [daily, queries, pages] = await Promise.all([
-      gscQuery(accessToken, property, { ...range, dimensions: ['date'], rowLimit: 31 }),
-      gscQuery(accessToken, property, { ...range, dimensions: ['query'], rowLimit: 10 }),
-      gscQuery(accessToken, property, { ...range, dimensions: ['page'], rowLimit: 10 }),
-    ])
-
-    const totals = (daily.rows || []).reduce(
-      (acc: any, row: any) => ({
-        clicks: acc.clicks + row.clicks,
-        impressions: acc.impressions + row.impressions,
-      }),
-      { clicks: 0, impressions: 0 }
-    )
-
-    const avgCtr = totals.impressions > 0 ? ((totals.clicks / totals.impressions) * 100).toFixed(1) : '0'
-    const avgPosition = daily.rows?.length > 0
-      ? (daily.rows.reduce((acc: number, row: any) => acc + row.position, 0) / daily.rows.length).toFixed(1)
-      : '0'
+    const ga4Res = await fetch(`${ADMIN_API}/accountSummaries?pageSize=200`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+    })
+    const ga4Json = ga4Res.ok ? await ga4Res.json() : { accountSummaries: [] }
+    const ga4Properties: { id: string; name: string }[] = []
+    for (const account of ga4Json.accountSummaries || []) {
+      for (const p of account.propertySummaries || []) {
+        ga4Properties.push({ id: p.property, name: p.displayName })
+      }
+    }
+    ga4Properties.sort((a, b) => a.name.localeCompare(b.name))
 
     return NextResponse.json({
       connected: true,
-      property,
-      summary: {
-        clicks: totals.clicks,
-        impressions: totals.impressions,
-        ctr: avgCtr,
-        position: avgPosition,
-        period: 'Last 28 days',
+      mode: auth.mode,
+      gscSites,
+      ga4Properties,
+      selected: {
+        gsc: auth.selection.gsc_property,
+        ga4: auth.selection.ga4_property,
       },
-      daily: (daily.rows || []).map((row: any) => ({
-        date: row.keys[0],
-        clicks: row.clicks,
-        impressions: row.impressions,
-      })),
-      topQueries: (queries.rows || []).map((row: any) => ({
-        query: row.keys[0],
-        clicks: row.clicks,
-        impressions: row.impressions,
-        ctr: (row.ctr * 100).toFixed(1),
-        position: row.position.toFixed(1),
-      })),
-      topPages: (pages.rows || []).map((row: any) => ({
-        page: row.keys[0].replace(/^https?:\/\/[^/]+/, '') || '/',
-        clicks: row.clicks,
-        impressions: row.impressions,
-        ctr: (row.ctr * 100).toFixed(1),
-        position: row.position.toFixed(1),
-      })),
     })
   } catch (err: any) {
-    if (err.message === 'REVOKED') {
-      return NextResponse.json({ connected: false, revoked: true })
-    }
-    if (err.status === 403) {
-      return NextResponse.json({
-        connected: true,
-        error: 'The connected Google account does not have access to this Search Console property',
-      })
-    }
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
+}
+
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { data: { session } } = await getSession()
+  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
+  const body = await request.json()
+  await saveGoogleSelection(id, {
+    gsc_property: body.gsc_property ?? null,
+    ga4_property: body.ga4_property ?? null,
+    ga4_property_name: body.ga4_property_name ?? null,
+  })
+
+  return NextResponse.json({ success: true })
 }
