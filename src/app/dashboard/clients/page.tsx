@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ClientsPage() {
   const adminSupabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
