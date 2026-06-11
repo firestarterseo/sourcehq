@@ -23,12 +23,6 @@ interface GscRow {
   position: string
 }
 
-interface GscDay {
-  date: string
-  clicks: number
-  impressions: number
-}
-
 interface GscData {
   connected: boolean
   revoked?: boolean
@@ -41,9 +35,25 @@ interface GscData {
     position: string
     period: string
   }
-  daily?: GscDay[]
+  daily?: { date: string; clicks: number; impressions: number }[]
   topQueries?: GscRow[]
   topPages?: GscRow[]
+}
+
+interface Ga4Data {
+  connected: boolean
+  revoked?: boolean
+  error?: string
+  propertyName?: string
+  summary?: {
+    sessions: number
+    users: number
+    pageviews: number
+    period: string
+  }
+  daily?: { date: string; sessions: number }[]
+  topPages?: { page: string; sessions: number }[]
+  channels?: { channel: string; sessions: number }[]
 }
 
 const industries = [
@@ -62,24 +72,24 @@ const industries = [
   'Other'
 ]
 
-function TrendChart({ daily }: { daily: GscDay[] }) {
-  if (!daily || daily.length === 0) return null
-  const max = Math.max(...daily.map(d => d.clicks), 1)
+function BarChart({ title, data }: { title: string; data: { date: string; value: number }[] }) {
+  if (!data || data.length === 0) return null
+  const max = Math.max(...data.map(d => d.value), 1)
   const fmtDate = (d: string) => {
     const dt = new Date(d + 'T00:00:00')
     return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
   return (
     <div style={{ marginBottom: '24px' }}>
-      <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#0D1B3E', marginBottom: '10px' }}>Clicks by day</h3>
+      <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#0D1B3E', marginBottom: '10px' }}>{title}</h3>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '120px', padding: '12px', background: '#FAFAF8', borderRadius: '10px', border: '0.5px solid #F3F4F6' }}>
-        {daily.map(d => (
+        {data.map(d => (
           <div
             key={d.date}
-            title={`${fmtDate(d.date)}: ${d.clicks.toLocaleString('en-US')} clicks, ${d.impressions.toLocaleString('en-US')} impressions`}
+            title={`${fmtDate(d.date)}: ${d.value.toLocaleString('en-US')}`}
             style={{
               flex: 1,
-              height: `${Math.max((d.clicks / max) * 100, 2)}%`,
+              height: `${Math.max((d.value / max) * 100, 2)}%`,
               background: '#6D28D9',
               borderRadius: '3px 3px 0 0',
               minWidth: '4px',
@@ -90,9 +100,44 @@ function TrendChart({ daily }: { daily: GscDay[] }) {
         ))}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', padding: '0 12px' }}>
-        <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{fmtDate(daily[0].date)}</span>
-        <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{fmtDate(daily[daily.length - 1].date)}</span>
+        <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{fmtDate(data[0].date)}</span>
+        <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{fmtDate(data[data.length - 1].date)}</span>
       </div>
+    </div>
+  )
+}
+
+function StatCards({ stats }: { stats: { label: string; value: string }[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: '12px', marginBottom: '24px' }}>
+      {stats.map(stat => (
+        <div key={stat.label} style={{ background: '#EDE9FE', borderRadius: '10px', padding: '16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '500', color: '#6D28D9', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{stat.label}</div>
+          <div style={{ fontFamily: 'Outfit, sans-serif', fontSize: '24px', fontWeight: '600', color: '#0D1B3E' }}>{stat.value}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SimpleTable({ title, rows }: { title: string; rows: { label: string; value: number }[] }) {
+  const fmt = (n: number) => n.toLocaleString('en-US')
+  return (
+    <div>
+      <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#0D1B3E', marginBottom: '10px' }}>{title}</h3>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          {rows.length === 0 && (
+            <tr><td style={{ fontSize: '12px', color: '#9CA3AF', padding: '12px 0', textAlign: 'center' }}>No data yet</td></tr>
+          )}
+          {rows.map((row, i) => (
+            <tr key={i} style={{ borderTop: '0.5px solid #F3F4F6' }}>
+              <td style={{ fontSize: '12px', color: '#0D1B3E', padding: '8px 8px 8px 0', maxWidth: '0', width: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</td>
+              <td style={{ fontSize: '12px', color: '#0D1B3E', padding: '8px 0', textAlign: 'right' }}>{fmt(row.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -110,6 +155,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [form, setForm] = useState({ name: '', industry: '', website: '' })
   const [gsc, setGsc] = useState<GscData | null>(null)
   const [gscLoading, setGscLoading] = useState(true)
+  const [ga4, setGa4] = useState<Ga4Data | null>(null)
 
   useEffect(() => {
     fetch(`/api/clients/${id}`)
@@ -131,6 +177,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       .then(r => r.json())
       .then(data => { setGsc(data); setGscLoading(false) })
       .catch(() => { setGsc(null); setGscLoading(false) })
+
+    fetch(`/api/clients/${id}/ga4`)
+      .then(r => r.json())
+      .then(data => setGa4(data))
+      .catch(() => setGa4(null))
   }, [id])
 
   async function handleSave() {
@@ -289,7 +340,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </div>
 
           {isConnected && (
-            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                 <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E' }}>Search Console</h2>
                 {gsc?.summary && <span style={{ fontSize: '12px', color: '#9CA3AF' }}>{gsc.summary.period}</span>}
@@ -299,56 +350,57 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#92400E' }}>{gsc.error}</div>
               ) : gsc?.summary ? (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
-                    {[
-                      { label: 'Clicks', value: fmt(gsc.summary.clicks) },
-                      { label: 'Impressions', value: fmt(gsc.summary.impressions) },
-                      { label: 'CTR', value: `${gsc.summary.ctr}%` },
-                      { label: 'Avg position', value: gsc.summary.position },
-                    ].map(stat => (
-                      <div key={stat.label} style={{ background: '#EDE9FE', borderRadius: '10px', padding: '16px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: '500', color: '#6D28D9', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{stat.label}</div>
-                        <div style={{ fontFamily: 'Outfit, sans-serif', fontSize: '24px', fontWeight: '600', color: '#0D1B3E' }}>{stat.value}</div>
-                      </div>
-                    ))}
-                  </div>
+                  <StatCards stats={[
+                    { label: 'Clicks', value: fmt(gsc.summary.clicks) },
+                    { label: 'Impressions', value: fmt(gsc.summary.impressions) },
+                    { label: 'CTR', value: `${gsc.summary.ctr}%` },
+                    { label: 'Avg position', value: gsc.summary.position },
+                  ]} />
 
-                  <TrendChart daily={gsc.daily || []} />
+                  <BarChart title="Clicks by day" data={(gsc.daily || []).map(d => ({ date: d.date, value: d.clicks }))} />
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                    {[
-                      { title: 'Top queries', rows: gsc.topQueries || [], key: 'query' as const },
-                      { title: 'Top pages', rows: gsc.topPages || [], key: 'page' as const },
-                    ].map(table => (
-                      <div key={table.title}>
-                        <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#0D1B3E', marginBottom: '10px' }}>{table.title}</h3>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr>
-                              <th style={{ textAlign: 'left', fontSize: '11px', fontWeight: '500', color: '#9CA3AF', paddingBottom: '6px' }}></th>
-                              <th style={{ textAlign: 'right', fontSize: '11px', fontWeight: '500', color: '#9CA3AF', paddingBottom: '6px' }}>Clicks</th>
-                              <th style={{ textAlign: 'right', fontSize: '11px', fontWeight: '500', color: '#9CA3AF', paddingBottom: '6px' }}>Pos</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {table.rows.length === 0 && (
-                              <tr><td colSpan={3} style={{ fontSize: '12px', color: '#9CA3AF', padding: '12px 0', textAlign: 'center' }}>No data yet</td></tr>
-                            )}
-                            {table.rows.map((row, i) => (
-                              <tr key={i} style={{ borderTop: '0.5px solid #F3F4F6' }}>
-                                <td style={{ fontSize: '12px', color: '#0D1B3E', padding: '8px 8px 8px 0', maxWidth: '0', width: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row[table.key]}</td>
-                                <td style={{ fontSize: '12px', color: '#0D1B3E', padding: '8px 0', textAlign: 'right' }}>{fmt(row.clicks)}</td>
-                                <td style={{ fontSize: '12px', color: '#6B7280', padding: '8px 0', textAlign: 'right' }}>{row.position}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ))}
+                    <SimpleTable title="Top queries" rows={(gsc.topQueries || []).map(r => ({ label: r.query || '', value: r.clicks }))} />
+                    <SimpleTable title="Top pages" rows={(gsc.topPages || []).map(r => ({ label: r.page || '', value: r.clicks }))} />
                   </div>
                 </>
               ) : (
                 <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading Search Console data...</p>
+              )}
+            </div>
+          )}
+
+          {isConnected && (
+            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: '600', color: '#0D1B3E' }}>Traffic</h2>
+                  {ga4?.propertyName && <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{ga4.propertyName}</span>}
+                </div>
+                {ga4?.summary && <span style={{ fontSize: '12px', color: '#9CA3AF' }}>{ga4.summary.period}</span>}
+              </div>
+
+              {!ga4 ? (
+                <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading traffic data...</p>
+              ) : ga4.error ? (
+                <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#92400E' }}>{ga4.error}</div>
+              ) : ga4.summary ? (
+                <>
+                  <StatCards stats={[
+                    { label: 'Sessions', value: fmt(ga4.summary.sessions) },
+                    { label: 'Users', value: fmt(ga4.summary.users) },
+                    { label: 'Pageviews', value: fmt(ga4.summary.pageviews) },
+                  ]} />
+
+                  <BarChart title="Sessions by day" data={(ga4.daily || []).map(d => ({ date: d.date, value: d.sessions }))} />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    <SimpleTable title="Top landing pages" rows={(ga4.topPages || []).map(r => ({ label: r.page, value: r.sessions }))} />
+                    <SimpleTable title="Traffic channels" rows={(ga4.channels || []).map(r => ({ label: r.channel, value: r.sessions }))} />
+                  </div>
+                </>
+              ) : (
+                <p style={{ fontSize: '13px', color: '#6B7280' }}>No traffic data available.</p>
               )}
             </div>
           )}
