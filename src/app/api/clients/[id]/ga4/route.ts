@@ -3,7 +3,6 @@ import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
-const ADMIN_API = 'https://analyticsadmin.googleapis.com/v1beta'
 const DATA_API = 'https://analyticsdata.googleapis.com/v1beta'
 
 async function getSession() {
@@ -76,58 +75,6 @@ async function refreshTokenIfNeeded(credentials: any, clientId: string) {
   return tokens.access_token
 }
 
-function extractHostname(url: string) {
-  return url
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '')
-    .replace(/^www\./, '')
-    .toLowerCase()
-}
-
-// Find which GA4 property belongs to this client's website.
-// Prefers an EXACT hostname match (firestarterseo.com), and only
-// falls back to a partial match (offers.firestarterseo.com) if
-// no exact match exists.
-async function resolveGa4Property(token: string, website: string) {
-  const res = await fetch(`${ADMIN_API}/accountSummaries?pageSize=200`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) return null
-
-  const json = await res.json()
-  const properties: { property: string; displayName: string }[] = []
-  for (const account of json.accountSummaries || []) {
-    for (const p of account.propertySummaries || []) {
-      properties.push({ property: p.property, displayName: p.displayName })
-    }
-  }
-  if (properties.length === 0) return null
-
-  const targetHost = extractHostname(website)
-  let partialMatch: { property: string; displayName: string } | null = null
-
-  for (const p of properties.slice(0, 50)) {
-    const streamsRes = await fetch(`${ADMIN_API}/${p.property}/dataStreams`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!streamsRes.ok) continue
-    const streams = await streamsRes.json()
-    for (const s of streams.dataStreams || []) {
-      const streamUri = s.webStreamData?.defaultUri || ''
-      if (!streamUri) continue
-      const streamHost = extractHostname(streamUri)
-      if (streamHost === targetHost) {
-        return p // exact match — done
-      }
-      if (!partialMatch && streamHost.includes(targetHost)) {
-        partialMatch = p // remember as backup, keep looking for exact
-      }
-    }
-  }
-
-  return partialMatch
-}
-
 async function runReport(token: string, property: string, body: Record<string, unknown>) {
   const res = await fetch(`${DATA_API}/${property}:runReport`, {
     method: 'POST',
@@ -162,49 +109,37 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: false })
   }
 
+  // Use the property chosen by the user — no more guessing
+  const property = connection.credentials.ga4_property
+  if (!property) {
+    return NextResponse.json({ connected: true, needsSelection: true })
+  }
+
   try {
     const accessToken = await refreshTokenIfNeeded(connection.credentials, id)
-
-    const { data: client } = await adminClient()
-      .from('clients')
-      .select('website')
-      .eq('id', id)
-      .single()
-
-    if (!client?.website) {
-      return NextResponse.json({ connected: true, error: 'No website set for this client' })
-    }
-
-    const property = await resolveGa4Property(accessToken, client.website)
-    if (!property) {
-      return NextResponse.json({
-        connected: true,
-        error: `No Google Analytics property found matching ${client.website} on the connected Google account`,
-      })
-    }
 
     const dateRanges = [{ startDate: '28daysAgo', endDate: 'yesterday' }]
 
     const [totalsReport, dailyReport, pagesReport, channelsReport] = await Promise.all([
-      runReport(accessToken, property.property, {
+      runReport(accessToken, property, {
         dateRanges,
         metrics: [{ name: 'sessions' }, { name: 'totalUsers' }, { name: 'screenPageViews' }],
       }),
-      runReport(accessToken, property.property, {
+      runReport(accessToken, property, {
         dateRanges,
         dimensions: [{ name: 'date' }],
         metrics: [{ name: 'sessions' }],
         orderBys: [{ dimension: { dimensionName: 'date' } }],
         limit: 31,
       }),
-      runReport(accessToken, property.property, {
+      runReport(accessToken, property, {
         dateRanges,
         dimensions: [{ name: 'landingPage' }],
         metrics: [{ name: 'sessions' }],
         orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
         limit: 10,
       }),
-      runReport(accessToken, property.property, {
+      runReport(accessToken, property, {
         dateRanges,
         dimensions: [{ name: 'sessionDefaultChannelGroup' }],
         metrics: [{ name: 'sessions' }],
@@ -217,7 +152,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
     return NextResponse.json({
       connected: true,
-      propertyName: property.displayName,
+      propertyName: connection.credentials.ga4_property_name || property,
       summary: {
         sessions: Number(totalsRow[0]?.value || 0),
         users: Number(totalsRow[1]?.value || 0),
