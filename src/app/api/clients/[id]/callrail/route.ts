@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+﻿import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
@@ -34,54 +34,56 @@ function authHeaders(apiKey: string) {
   return { Authorization: `Token token="${apiKey}"` }
 }
 
-// POST: save + verify a CallRail API key for this client
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  const { api_key } = await request.json()
-  if (!api_key) return NextResponse.json({ error: 'API key is required' }, { status: 400 })
+  const body = await request.json()
+  let credentials: any = null
 
-  // Verify the key by listing accounts
-  const res = await fetch(`${CALLRAIL_API}/a.json`, { headers: authHeaders(api_key) })
-  if (!res.ok) {
-    return NextResponse.json({ error: 'CallRail rejected this API key — double-check it and try again' }, { status: 400 })
-  }
-  const json = await res.json()
-  const account = json.accounts?.[0]
-  if (!account) {
-    return NextResponse.json({ error: 'No CallRail accounts found for this API key' }, { status: 400 })
-  }
-
-  const { error } = await adminClient()
-    .from('data_connections')
-    .upsert(
-      {
-        client_id: id,
-        source_type: 'callrail',
-        status: 'connected',
-        credentials: { api_key, account_id: account.id, account_name: account.name },
-      },
-      { onConflict: 'client_id,source_type' }
-    )
-
-  if (error) {
-    // Fallback if there's no unique constraint for upsert
-    await adminClient().from('data_connections').delete().eq('client_id', id).eq('source_type', 'callrail')
-    const { error: err2 } = await adminClient().from('data_connections').insert({
-      client_id: id,
-      source_type: 'callrail',
-      status: 'connected',
-      credentials: { api_key, account_id: account.id, account_name: account.name },
-    })
-    if (err2) return NextResponse.json({ error: err2.message }, { status: 400 })
+  if (body.company_id) {
+    if (!process.env.CALLRAIL_AGENCY_KEY) {
+      return NextResponse.json({ error: 'Agency CallRail key not configured' }, { status: 400 })
+    }
+    credentials = {
+      mode: 'agency',
+      company_id: body.company_id,
+      company_name: body.company_name || null,
+      account_id: body.account_id || null,
+    }
+  } else if (body.api_key) {
+    const res = await fetch(`${CALLRAIL_API}/a.json`, { headers: authHeaders(body.api_key) })
+    if (!res.ok) {
+      return NextResponse.json({ error: 'CallRail rejected this API key' }, { status: 400 })
+    }
+    const json = await res.json()
+    const account = json.accounts?.[0]
+    if (!account) {
+      return NextResponse.json({ error: 'No CallRail accounts found for this API key' }, { status: 400 })
+    }
+    credentials = {
+      mode: 'standalone',
+      api_key: body.api_key,
+      account_id: account.id,
+      account_name: account.name,
+    }
+  } else {
+    return NextResponse.json({ error: 'Provide either a company selection or an API key' }, { status: 400 })
   }
 
-  return NextResponse.json({ success: true, accountName: account.name })
+  await adminClient().from('data_connections').delete().eq('client_id', id).eq('source_type', 'callrail')
+  const { error } = await adminClient().from('data_connections').insert({
+    client_id: id,
+    source_type: 'callrail',
+    status: 'connected',
+    credentials,
+  })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ success: true })
 }
 
-// DELETE: disconnect CallRail for this client
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
@@ -96,7 +98,6 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ success: true })
 }
 
-// GET: pull last-28-day call data
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
@@ -113,7 +114,34 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: false })
   }
 
-  const { api_key, account_id, account_name } = connection.credentials
+  const creds = connection.credentials
+  let apiKey: string
+  let accountId: string
+  let companyFilter = ''
+  let label: string
+
+  if (creds.mode === 'agency') {
+    if (!process.env.CALLRAIL_AGENCY_KEY) {
+      return NextResponse.json({ connected: true, error: 'Agency CallRail key not configured' })
+    }
+    apiKey = process.env.CALLRAIL_AGENCY_KEY
+    if (creds.account_id) {
+      accountId = creds.account_id
+    } else {
+      const accRes = await fetch(`${CALLRAIL_API}/a.json`, { headers: authHeaders(apiKey) })
+      if (!accRes.ok) {
+        return NextResponse.json({ connected: true, error: 'Agency CallRail key was rejected' })
+      }
+      const accJson = await accRes.json()
+      accountId = accJson.accounts?.[0]?.id
+    }
+    companyFilter = `&company_id=${creds.company_id}`
+    label = creds.company_name || 'CallRail'
+  } else {
+    apiKey = creds.api_key
+    accountId = creds.account_id
+    label = creds.account_name || 'CallRail'
+  }
 
   try {
     const end = new Date()
@@ -121,12 +149,11 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     const startDate = start.toISOString().split('T')[0]
     const endDate = end.toISOString().split('T')[0]
 
-    // Pull calls (up to 3 pages of 250 = 750 calls per 28 days)
     const calls: any[] = []
     for (let page = 1; page <= 3; page++) {
       const res = await fetch(
-        `${CALLRAIL_API}/a/${account_id}/calls.json?start_date=${startDate}&end_date=${endDate}&per_page=250&page=${page}&fields=source,duration,first_call,answered,start_time`,
-        { headers: authHeaders(api_key) }
+        `${CALLRAIL_API}/a/${accountId}/calls.json?start_date=${startDate}&end_date=${endDate}&per_page=250&page=${page}&fields=source,duration,first_call,answered,start_time${companyFilter}`,
+        { headers: authHeaders(apiKey) }
       )
       if (!res.ok) {
         const body = await res.text()
@@ -137,7 +164,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       if (!json.calls || json.calls.length < 250) break
     }
 
-    // Aggregate
     const byDay: Record<string, number> = {}
     const bySource: Record<string, number> = {}
     let answered = 0
@@ -154,7 +180,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       totalDuration += c.duration || 0
     }
 
-    // Fill in zero days so the chart has no gaps
     const daily: { date: string; calls: number }[] = []
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const key = d.toISOString().split('T')[0]
@@ -168,7 +193,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
     return NextResponse.json({
       connected: true,
-      accountName: account_name,
+      accountName: label,
       summary: {
         totalCalls: calls.length,
         answered,
