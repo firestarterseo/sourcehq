@@ -35,7 +35,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect('https://sourcehq.vercel.app/dashboard/connections?error=token_exchange_failed')
   }
 
-  // Identify which Google account was connected (nice for the UI)
   let email = null
   try {
     const meRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
