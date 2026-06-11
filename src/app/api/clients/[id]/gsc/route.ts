@@ -1,8 +1,3 @@
-// Save as: app/api/clients/[id]/gsc/route.ts (replaces existing contents)
-// Merged: keeps your data_connections/credentials schema and session auth,
-// adds error checks, property-format resolution, 2-day lag offset,
-// invalid_grant handling, parallel queries, daily trend + top pages.
-
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
@@ -54,8 +49,6 @@ async function refreshTokenIfNeeded(credentials: any, clientId: string) {
   const tokens = await res.json()
 
   if (!tokens.access_token) {
-    // User revoked access in their Google account — flip the connection
-    // to disconnected so the UI shows "Reconnect" instead of erroring forever
     if (tokens.error === 'invalid_grant') {
       await adminClient()
         .from('data_connections')
@@ -103,40 +96,6 @@ async function gscQuery(token: string, property: string, body: Record<string, un
   return json
 }
 
-// clients.website may not match the GSC property format exactly
-// (trailing slash, http vs https, or a domain property). Ask GSC which
-// properties this account can actually see and pick the best match.
-async function resolveProperty(token: string, website: string): Promise<string | null> {
-  const res = await fetch(`${GSC_API}/sites`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) return null
-
-  const { siteEntry } = await res.json()
-  if (!siteEntry?.length) return null
-
-  const usable = siteEntry.filter(
-    (s: any) => s.permissionLevel !== 'siteUnverifiedUser'
-  )
-
-  const hostname = website
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '')
-    .replace(/^www\./, '')
-    .toLowerCase()
-
-  // Prefer domain property, then URL-prefix containing the hostname
-  const domainMatch = usable.find(
-    (s: any) => s.siteUrl === `sc-domain:${hostname}`
-  )
-  if (domainMatch) return domainMatch.siteUrl
-
-  const prefixMatch = usable.find((s: any) =>
-    s.siteUrl.toLowerCase().includes(hostname)
-  )
-  return prefixMatch?.siteUrl ?? null
-}
-
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
@@ -153,26 +112,14 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: false })
   }
 
+  // Use the property chosen by the user — no more guessing
+  const property = connection.credentials.gsc_property
+  if (!property) {
+    return NextResponse.json({ connected: true, needsSelection: true })
+  }
+
   try {
     const accessToken = await refreshTokenIfNeeded(connection.credentials, id)
-
-    const { data: client } = await adminClient()
-      .from('clients')
-      .select('website')
-      .eq('id', id)
-      .single()
-
-    if (!client?.website) {
-      return NextResponse.json({ connected: true, error: 'No website set for this client' })
-    }
-
-    const property = await resolveProperty(accessToken, client.website)
-    if (!property) {
-      return NextResponse.json({
-        connected: true,
-        error: `No Search Console property found matching ${client.website} on the connected Google account`,
-      })
-    }
 
     // GSC data lags ~2 days; end the window there to avoid trailing zeros
     const end = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
