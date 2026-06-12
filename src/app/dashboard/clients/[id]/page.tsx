@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
+import GenerateReportButton from '@/components/GenerateReportButton'
 
 interface Client {
   id: string
@@ -408,6 +409,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>{client.name}</span>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            <GenerateReportButton clientId={id} />
             {!editing && (
               <>
                 <button onClick={() => setEditing(true)} style={{ background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Edit</button>
