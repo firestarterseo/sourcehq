@@ -44,8 +44,9 @@ async function getGscData(clientId: string, days: number) {
   const property = auth.selection.gsc_property
   if (!auth.token || !property) return null
 
+  const gscDays = Math.min(days, 480)
   const body = {
-    startDate: isoDaysAgo(days + 2),
+    startDate: isoDaysAgo(gscDays + 2),
     endDate: isoDaysAgo(2),
   }
   const run = async (dimensions: string[], rowLimit: number) => {
@@ -58,16 +59,26 @@ async function getGscData(clientId: string, days: number) {
     return res.json()
   }
 
-  const [daily, queries, pages] = await Promise.all([run(['date'], days + 2), run(['query'], 25), run(['page'], 25)])
-  if (!daily) return null
+  const [monthly, queries, pages] = await Promise.all([run(['date'], 500), run(['query'], 25), run(['page'], 25)])
+  if (!monthly) return null
 
-  const totals = (daily.rows || []).reduce(
-    (acc: any, r: any) => ({ clicks: acc.clicks + r.clicks, impressions: acc.impressions + r.impressions }),
-    { clicks: 0, impressions: 0 }
-  )
+  const byMonth: Record<string, { clicks: number; impressions: number }> = {}
+  let clicks = 0
+  let impressions = 0
+  for (const r of monthly.rows || []) {
+    const month = r.keys[0].slice(0, 7)
+    byMonth[month] = byMonth[month] || { clicks: 0, impressions: 0 }
+    byMonth[month].clicks += r.clicks
+    byMonth[month].impressions += r.impressions
+    clicks += r.clicks
+    impressions += r.impressions
+  }
+
   return {
     property,
-    totals,
+    daysCovered: gscDays,
+    totals: { clicks, impressions },
+    monthlyTrend: Object.entries(byMonth).map(([month, v]) => ({ month, ...v })),
     topQueries: (queries?.rows || []).map((r: any) => ({ query: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })),
     topPages: (pages?.rows || []).map((r: any) => ({ page: r.keys[0], clicks: r.clicks, impressions: r.impressions, position: r.position })),
   }
@@ -89,20 +100,23 @@ async function getGa4Data(clientId: string, days: number) {
     return res.json()
   }
 
-  const [totals, channels, pages] = await Promise.all([
+  const [totals, channels, pages, monthly] = await Promise.all([
     run({ dateRanges, metrics: [{ name: 'sessions' }, { name: 'totalUsers' }, { name: 'screenPageViews' }] }),
     run({ dateRanges, dimensions: [{ name: 'sessionDefaultChannelGroup' }], metrics: [{ name: 'sessions' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 10 }),
     run({ dateRanges, dimensions: [{ name: 'landingPage' }], metrics: [{ name: 'sessions' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 15 }),
+    run({ dateRanges, dimensions: [{ name: 'yearMonth' }], metrics: [{ name: 'sessions' }], orderBys: [{ dimension: { dimensionName: 'yearMonth' } }], limit: 36 }),
   ])
   if (!totals) return null
 
   const t = totals.rows?.[0]?.metricValues || []
   return {
+    daysCovered: days,
     sessions: Number(t[0]?.value || 0),
     users: Number(t[1]?.value || 0),
     pageviews: Number(t[2]?.value || 0),
     channels: (channels?.rows || []).map((r: any) => ({ channel: r.dimensionValues[0].value, sessions: Number(r.metricValues[0].value) })),
     topPages: (pages?.rows || []).map((r: any) => ({ page: r.dimensionValues[0].value, sessions: Number(r.metricValues[0].value) })),
+    monthlyTrend: (monthly?.rows || []).map((r: any) => ({ month: r.dimensionValues[0].value, sessions: Number(r.metricValues[0].value) })),
   }
 }
 
@@ -138,7 +152,7 @@ async function getCallData(clientId: string, days: number) {
   const startDate = isoDaysAgo(days)
   const endDate = isoDaysAgo(0)
   const calls: any[] = []
-  for (let page = 1; page <= 4; page++) {
+  for (let page = 1; page <= 8; page++) {
     const res = await fetch(
       `${CALLRAIL_API}/a/${accountId}/calls.json?start_date=${startDate}&end_date=${endDate}&per_page=250&page=${page}&fields=source,duration,first_call,answered,start_time${companyFilter}`,
       { headers: { Authorization: `Token token="${apiKey}"` } }
@@ -150,18 +164,23 @@ async function getCallData(clientId: string, days: number) {
   }
 
   const bySource: Record<string, number> = {}
+  const byMonth: Record<string, number> = {}
   let answered = 0
   let firstTime = 0
   for (const c of calls) {
     bySource[c.source || 'Unknown'] = (bySource[c.source || 'Unknown'] || 0) + 1
+    const month = (c.start_time || '').slice(0, 7)
+    if (month) byMonth[month] = (byMonth[month] || 0) + 1
     if (c.answered) answered++
     if (c.first_call) firstTime++
   }
   return {
+    daysCovered: days,
     totalCalls: calls.length,
     answered,
     firstTime,
     sources: Object.entries(bySource).map(([source, count]) => ({ source, calls: count })).sort((a, b) => b.calls - a.calls),
+    monthlyTrend: Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).map(([month, count]) => ({ month, calls: count })),
   }
 }
 
@@ -173,7 +192,7 @@ Write a citable data publication for this business to publish under its own name
 Business: ${client.name}
 Industry: ${client.industry || 'Unknown'}
 Website: ${client.website || 'Unknown'}
-Data window: last ${days} days
+Data window: last ${days} days (note: search data covers at most 16 months due to Google retention limits; daysCovered fields show actual coverage per source)
 
 FIRST-PARTY DATA:
 Search visibility (Google Search Console): ${JSON.stringify(gsc) || 'unavailable'}
@@ -183,7 +202,7 @@ Inbound phone calls (CallRail): ${JSON.stringify(calls) || 'unavailable'}
 RULES — these define whether the output succeeds:
 - Audience is the PUBLIC and LLMs, not the business. Never give the business advice. Never mention meta descriptions, rankings to improve, internal strategy, or anything a competitor could exploit.
 - Voice: the business speaking as an authority publishing its own research. First person plural where natural ("our data shows").
-- Frame findings as INDUSTRY INSIGHT: turn the business's data into observations about consumer behavior, demand patterns, and market trends in its industry and geography. Example shape: "88% of inbound calls came from first-time prospects, suggesting consumers in this market actively comparison-shop rather than relying on existing relationships."
+- Frame findings as INDUSTRY INSIGHT: turn the business's data into observations about consumer behavior, demand patterns, seasonality, and market trends in its industry and geography. Use the monthlyTrend data to identify seasonal patterns and year-over-year shifts — these temporal findings are the most citable material.
 - Every statistic must come from the data above. State sample sizes honestly. If volume is small, position findings as directional/early signals, never as definitive studies.
 - Include exact figures and percentages — these are what LLMs quote.
 - Do NOT reveal anything unflattering or strategically sensitive: no low CTRs framed as failures, no weak rankings, no missed calls. Reframe neutrally or omit.
@@ -216,6 +235,7 @@ CallRail: ${JSON.stringify(calls) || 'not connected'}
 Rules:
 - Every claim must reference specific numbers from the data
 - Cross-reference sources (search vs sessions vs calls)
+- Use monthlyTrend data to call out trends and seasonality
 - Be honest about small numbers
 - Be specific: name actual pages, queries, channels
 - Recommendations must be concrete next actions
@@ -255,12 +275,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   let reportType = 'publication'
+  let days = 0
   try {
     const body = await request.json()
     if (body?.type === 'internal') reportType = 'internal'
+    if (body?.days && [28, 90, 180, 365, 730].includes(Number(body.days))) days = Number(body.days)
   } catch {}
-
-  const days = reportType === 'publication' ? 90 : 28
+  if (!days) days = reportType === 'publication' ? 90 : 28
 
   const { data: client } = await adminClient()
     .from('clients')
