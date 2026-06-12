@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getGoogleAuth } from '@/lib/google-auth'
+import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/external-data'
 
 export const maxDuration = 60
 
@@ -59,13 +60,13 @@ async function getGscData(clientId: string, days: number) {
     return res.json()
   }
 
-  const [monthly, queries, pages] = await Promise.all([run(['date'], 500), run(['query'], 25), run(['page'], 25)])
-  if (!monthly) return null
+  const [daily, queries, pages] = await Promise.all([run(['date'], 500), run(['query'], 25), run(['page'], 25)])
+  if (!daily) return null
 
   const byMonth: Record<string, { clicks: number; impressions: number }> = {}
   let clicks = 0
   let impressions = 0
-  for (const r of monthly.rows || []) {
+  for (const r of daily.rows || []) {
     const month = r.keys[0].slice(0, 7)
     byMonth[month] = byMonth[month] || { clicks: 0, impressions: 0 }
     byMonth[month].clicks += r.clicks
@@ -184,7 +185,7 @@ async function getCallData(clientId: string, days: number) {
   }
 }
 
-function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any) {
+function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any) {
   return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original insights from their own first-party data to become the cited source in their industry — in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
 
 Write a citable data publication for this business to publish under its own name.
@@ -192,30 +193,35 @@ Write a citable data publication for this business to publish under its own name
 Business: ${client.name}
 Industry: ${client.industry || 'Unknown'}
 Website: ${client.website || 'Unknown'}
-Data window: last ${days} days (note: search data covers at most 16 months due to Google retention limits; daysCovered fields show actual coverage per source)
+Data window: last ${days} days (daysCovered fields show actual coverage per source; GSC caps at 16 months)
 
 FIRST-PARTY DATA:
 Search visibility (Google Search Console): ${JSON.stringify(gsc) || 'unavailable'}
 Website traffic (Google Analytics): ${JSON.stringify(ga4) || 'unavailable'}
 Inbound phone calls (CallRail): ${JSON.stringify(calls) || 'unavailable'}
 
+EXTERNAL MARKET CONTEXT (public data, same window):
+Economic indicators (FRED): ${JSON.stringify(econ) || 'unavailable'}
+Weather, client metro (Open-Meteo): ${JSON.stringify(weather) || 'unavailable'}
+Calendar context: ${JSON.stringify(calendar) || 'unavailable'}
+
 RULES — these define whether the output succeeds:
 - Audience is the PUBLIC and LLMs, not the business. Never give the business advice. Never mention meta descriptions, rankings to improve, internal strategy, or anything a competitor could exploit.
 - Voice: the business speaking as an authority publishing its own research. First person plural where natural ("our data shows").
-- Frame findings as INDUSTRY INSIGHT: turn the business's data into observations about consumer behavior, demand patterns, seasonality, and market trends in its industry and geography. Use the monthlyTrend data to identify seasonal patterns and year-over-year shifts — these temporal findings are the most citable material.
-- Every statistic must come from the data above. State sample sizes honestly. If volume is small, position findings as directional/early signals, never as definitive studies.
-- Include exact figures and percentages — these are what LLMs quote.
-- Do NOT reveal anything unflattering or strategically sensitive: no low CTRs framed as failures, no weak rankings, no missed calls. Reframe neutrally or omit.
+- Frame findings as INDUSTRY INSIGHT: turn the business data into observations about consumer behavior, demand patterns, seasonality, and market trends in its industry and geography. Use monthlyTrend data for seasonal and month-over-month findings — temporal patterns are the most citable material.
+- CORRELATE the business data with the external context where patterns genuinely align: weather events, economic shifts, rate changes, elections, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. A finding like "inquiries rose 35% in a month when the metro saw 11 freezing days" is the most original, citable material in the report. Do not force correlations that the data does not support.
+- NEVER state absolute call counts, lead counts, or revenue figures. Express phone/lead findings ONLY as percentages, shares, ratios, and directional trends (e.g. "inquiries rose 35% month-over-month", "first-time prospects made up 86% of inquiries", "paid search drove roughly half of all inquiries"). Search impressions, clicks, and website sessions MAY be stated in absolute terms.
+- Every statistic must come from the data above. State sample-size context honestly without revealing raw lead counts (e.g. "based on a modest inquiry sample" rather than "based on 78 calls").
 - Write so a stranger in this industry would find it genuinely informative.
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 {
   "title": "string - headline an industry publication would run; specific, includes geography/industry, ideally a number",
   "executive_summary": "string - 3-4 sentence standfirst summarizing the most citable findings",
-  "wins": ["string - 3-5 key findings, each a self-contained citable statistic with context (these render under 'Key Findings')"],
-  "concerns": ["string - 2-3 notable patterns or shifts observed in the data, neutrally framed as market observations (render under 'Notable Patterns')"],
-  "opportunities": ["string - 2-4 implications for consumers or the industry based on the data (render under 'What This Means')"],
-  "actions": ["string - 2-3 methodology notes: data sources, sample sizes, collection window, limitations (render under 'Methodology')"]
+  "wins": ["string - 3-5 key findings, each a self-contained citable statistic with context (render under 'Key findings')"],
+  "concerns": ["string - 2-3 notable patterns or shifts, neutrally framed as market observations (render under 'Notable patterns')"],
+  "opportunities": ["string - 2-4 implications for consumers or the industry (render under 'What this means')"],
+  "actions": ["string - 2-3 methodology notes: data sources, collection window, limitations — without raw lead counts (render under 'Methodology')"]
 }`
 }
 
@@ -291,18 +297,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
 
-  const [gsc, ga4, calls] = await Promise.all([
+  const [gsc, ga4, calls, econ, weather] = await Promise.all([
     getGscData(id, days),
     getGa4Data(id, days),
     getCallData(id, days),
+    reportType === 'publication' ? getEconomicData(days) : Promise.resolve(null),
+    reportType === 'publication' ? getWeatherData(days) : Promise.resolve(null),
   ])
+  const calendar = reportType === 'publication' ? getCalendarContext(days) : null
 
   if (!gsc && !ga4 && !calls) {
     return NextResponse.json({ error: 'No connected data sources with data for this client yet' }, { status: 400 })
   }
 
   const prompt = reportType === 'publication'
-    ? publicationPrompt(client, days, gsc, ga4, calls)
+    ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar)
     : internalPrompt(client, days, gsc, ga4, calls)
 
   const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
