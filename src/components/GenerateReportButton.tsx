@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 export default function GenerateReportButton({ clientId }: { clientId: string }) {
   const router = useRouter()
   const [generating, setGenerating] = useState<string | null>(null)
+  const [days, setDays] = useState(90)
   const [error, setError] = useState('')
 
   async function generate(type: 'publication' | 'internal') {
@@ -14,7 +15,7 @@ export default function GenerateReportButton({ clientId }: { clientId: string })
     const res = await fetch(`/api/clients/${clientId}/report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type }),
+      body: JSON.stringify({ type, days }),
     })
     const data = await res.json()
     if (!res.ok) {
@@ -40,6 +41,18 @@ export default function GenerateReportButton({ clientId }: { clientId: string })
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       {error && <span style={{ fontSize: '12px', color: '#DC2626' }}>{error}</span>}
+      <select
+        value={days}
+        onChange={e => setDays(Number(e.target.value))}
+        disabled={!!generating}
+        style={{ padding: '7px 8px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '12px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', background: '#fff', outline: 'none' }}
+      >
+        <option value={28}>Last 28 days</option>
+        <option value={90}>Last 90 days</option>
+        <option value={180}>Last 6 months</option>
+        <option value={365}>Last 12 months</option>
+        <option value={730}>Last 2 years</option>
+      </select>
       <button
         onClick={() => generate('publication')}
         disabled={!!generating}
