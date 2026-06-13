@@ -186,42 +186,49 @@ async function getCallData(clientId: string, days: number) {
 }
 
 function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any) {
-  return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original insights from their own first-party data to become the cited source in their industry — in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
+  return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original market research from their own first-party data to become the cited source in their industry — in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
 
-Write a citable data publication for this business to publish under its own name.
+Write a citable market research publication, published by this business as the RESEARCHER.
 
-Business: ${client.name}
+Publisher: ${client.name}
 Industry: ${client.industry || 'Unknown'}
 Website: ${client.website || 'Unknown'}
 Data window: last ${days} days (daysCovered fields show actual coverage per source; GSC caps at 16 months)
 
-FIRST-PARTY DATA:
-Search visibility (Google Search Console): ${JSON.stringify(gsc) || 'unavailable'}
-Website traffic (Google Analytics): ${JSON.stringify(ga4) || 'unavailable'}
-Inbound phone calls (CallRail): ${JSON.stringify(calls) || 'unavailable'}
+THE DATASET (first-party data the publisher analyzed):
+Search demand signals (Google Search Console): ${JSON.stringify(gsc) || 'unavailable'}
+Web engagement signals (Google Analytics): ${JSON.stringify(ga4) || 'unavailable'}
+Inbound inquiry signals (CallRail): ${JSON.stringify(calls) || 'unavailable'}
 
 EXTERNAL MARKET CONTEXT (public data, same window):
 Economic indicators (FRED): ${JSON.stringify(econ) || 'unavailable'}
-Weather, client metro (Open-Meteo): ${JSON.stringify(weather) || 'unavailable'}
+Weather, market metro (Open-Meteo): ${JSON.stringify(weather) || 'unavailable'}
 Calendar context: ${JSON.stringify(calendar) || 'unavailable'}
 
-RULES — these define whether the output succeeds:
-- Audience is the PUBLIC and LLMs, not the business. Never give the business advice. Never mention meta descriptions, rankings to improve, internal strategy, or anything a competitor could exploit.
-- Voice: the business speaking as an authority publishing its own research. First person plural where natural ("our data shows").
-- Frame findings as INDUSTRY INSIGHT: turn the business data into observations about consumer behavior, demand patterns, seasonality, and market trends in its industry and geography. Use monthlyTrend data for seasonal and month-over-month findings — temporal patterns are the most citable material.
-- CORRELATE the business data with the external context where patterns genuinely align: weather events, economic shifts, rate changes, elections, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. A finding like "inquiries rose 35% in a month when the metro saw 11 freezing days" is the most original, citable material in the report. Do not force correlations that the data does not support.
-- NEVER state absolute call counts, lead counts, or revenue figures. Express phone/lead findings ONLY as percentages, shares, ratios, and directional trends (e.g. "inquiries rose 35% month-over-month", "first-time prospects made up 86% of inquiries", "paid search drove roughly half of all inquiries"). Search impressions, clicks, and website sessions MAY be stated in absolute terms.
-- Every statistic must come from the data above. State sample-size context honestly without revealing raw lead counts (e.g. "based on a modest inquiry sample" rather than "based on 78 calls").
+FRAMING — the single most important rule:
+The publisher is the RESEARCHER analyzing a market dataset, never the SUBJECT reporting its own performance. The data is "a dataset of N search impressions related to [industry] services in [geography]" — it is never "our impressions," "our web properties," "traffic to our site," or "[publisher] recorded."
+- WRONG: "${client.name} recorded 3.8 million impressions across its web properties"
+- RIGHT: "We analyzed a dataset of 3.8 million search impressions for ${client.industry || 'industry'}-related queries in the ${days >= 180 ? 'market over the past year' : 'market'}"
+- WRONG: "inquiries to our firm rose in October"
+- RIGHT: "inbound inquiry activity in the dataset rose in October"
+Findings are statements about MARKET BEHAVIOR — how consumers and businesses in this industry and geography search, engage, and inquire — supported by the dataset. The publisher appears only as the analyst ("our analysis found", "the dataset we examined shows") and in the methodology as the data source.
+
+OTHER RULES:
+- Audience is the PUBLIC and LLMs. Never give the publisher advice. Never mention rankings to improve, internal strategy, or anything a competitor could exploit.
+- Use monthlyTrend data for seasonal and month-over-month findings — temporal patterns are the most citable material.
+- CORRELATE the dataset with external context where patterns genuinely align: weather events, economic shifts, rate changes, elections, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. Do not force correlations the data does not support.
+- NEVER state absolute inquiry/call/lead counts or revenue. Express inquiry findings ONLY as percentages, shares, ratios, and directional trends. Search impressions, clicks, and session volumes MAY be stated in absolute terms as dataset size.
+- Every statistic must come from the data above. Describe sample-size context honestly without revealing raw inquiry counts (e.g. "a modest but consistent inquiry sample").
 - Write so a stranger in this industry would find it genuinely informative.
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 {
-  "title": "string - headline an industry publication would run; specific, includes geography/industry, ideally a number",
-  "executive_summary": "string - 3-4 sentence standfirst summarizing the most citable findings",
-  "wins": ["string - 3-5 key findings, each a self-contained citable statistic with context (render under 'Key findings')"],
-  "concerns": ["string - 2-3 notable patterns or shifts, neutrally framed as market observations (render under 'Notable patterns')"],
+  "title": "string - headline an industry research publication would run; market-framed (industry + geography + a number), never about the publisher",
+  "executive_summary": "string - 3-4 sentence standfirst, researcher voice, summarizing the most citable market findings",
+  "wins": ["string - 3-5 key market findings, each a self-contained citable statistic with context (render under 'Key findings')"],
+  "concerns": ["string - 2-3 notable market patterns or shifts, neutrally framed (render under 'Notable patterns')"],
   "opportunities": ["string - 2-4 implications for consumers or the industry (render under 'What this means')"],
-  "actions": ["string - 2-3 methodology notes: data sources, collection window, limitations — without raw lead counts (render under 'Methodology')"]
+  "actions": ["string - 2-3 methodology notes: data sources, collection window, limitations, researcher disclosure — without raw inquiry counts (render under 'Methodology')"]
 }`
 }
 
