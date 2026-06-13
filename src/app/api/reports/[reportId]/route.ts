@@ -42,3 +42,17 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ report
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ report })
 }
+
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ reportId: string }> }) {
+  const { reportId } = await params
+  const { data: { session } } = await getSession()
+  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
+  const { error } = await adminClient()
+    .from('reports')
+    .delete()
+    .eq('id', reportId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ success: true })
+}
