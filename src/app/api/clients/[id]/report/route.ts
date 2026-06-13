@@ -184,7 +184,16 @@ async function getCallData(clientId: string, days: number) {
     sourceShares: Object.entries(bySource)
       .map(([source, count]) => ({ source, sharePct: Math.round((count / total) * 100) }))
       .sort((a, b) => b.sharePct - a.sharePct),
-    monthlyTrend: Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).map(([month, count]) => ({ month, calls: count })),
+    monthlyTrend: (() => {
+      const entries = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b))
+      const peak = Math.max(...entries.map(([, c]) => c as number), 1)
+      const totalCalls = (entries.reduce((s, [, c]) => s + (c as number), 0)) || 1
+      return entries.map(([month, count]) => ({
+        month,
+        index: Math.round(((count as number) / peak) * 100),
+        sharePct: Math.round(((count as number) / totalCalls) * 100),
+      }))
+    })(),
   }
 }
 
@@ -225,7 +234,7 @@ OTHER RULES:
 - Use monthlyTrend data for seasonal and month-over-month findings — temporal patterns are the most citable material.
 - CORRELATE the dataset with external context where patterns genuinely align: weather, economic shifts, rate changes, elections, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. Do not force correlations the data does not support.
 - When referencing consumer sentiment, on first mention call it "U.S. consumer sentiment (University of Michigan survey)" so the source is clear and the word "Michigan" is not confusing in a local-market report.
-- NEVER state absolute inquiry/call/lead counts. The CallRail data above is ALREADY in shares/percentages — express inquiry findings only as those shares, ratios, and directional trends. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
+- The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts — describe inquiry seasonality using relative language (''inquiry activity peaked in February, running about double the December level'') and never invent absolute call numbers. NEVER state absolute inquiry/call/lead counts. The CallRail data above is ALREADY in shares/percentages — express inquiry findings only as those shares, ratios, and directional trends. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
 - Methodology section: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview/AI-referral counts — describe scale approximately ("several tens of thousands of sessions," "a small number of AI-assistant referrals").
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
@@ -377,3 +386,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
+
