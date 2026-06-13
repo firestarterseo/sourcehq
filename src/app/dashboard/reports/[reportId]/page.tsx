@@ -29,6 +29,14 @@ interface Report {
   content: ReportContent
 }
 
+const DERIVATIVES = [
+  { key: 'linkedin', label: 'LinkedIn post' },
+  { key: 'twitter', label: 'X thread' },
+  { key: 'email', label: 'Email block' },
+  { key: 'gbp', label: 'GBP post' },
+  { key: 'press', label: 'Press pitch' },
+]
+
 function Section({ title, items, color }: { title: string; items?: string[]; color: string }) {
   if (!items || items.length === 0) return null
   return (
@@ -97,6 +105,11 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [activeDeriv, setActiveDeriv] = useState<string | null>(null)
+  const [derivLoading, setDerivLoading] = useState<string | null>(null)
+  const [derivText, setDerivText] = useState<Record<string, string>>({})
+  const [derivCopied, setDerivCopied] = useState(false)
+  const [derivError, setDerivError] = useState('')
 
   useEffect(() => {
     fetch(`/api/reports/${reportId}`)
@@ -116,6 +129,35 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
       await navigator.clipboard.writeText(buildHtml(report))
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
+    } catch {}
+  }
+
+  async function runDerivative(key: string) {
+    setActiveDeriv(key)
+    setDerivError('')
+    if (derivText[key]) return
+    setDerivLoading(key)
+    try {
+      const res = await fetch(`/api/reports/${reportId}/derive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format: key }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setDerivError(data.error || 'Failed to generate'); setDerivLoading(null); return }
+      setDerivText(prev => ({ ...prev, [key]: data.text }))
+    } catch {
+      setDerivError('Failed to generate')
+    }
+    setDerivLoading(null)
+  }
+
+  async function copyDeriv() {
+    if (!activeDeriv || !derivText[activeDeriv]) return
+    try {
+      await navigator.clipboard.writeText(derivText[activeDeriv])
+      setDerivCopied(true)
+      setTimeout(() => setDerivCopied(false), 2000)
     } catch {}
   }
 
@@ -170,7 +212,7 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
               <Section title={labels.actions} items={report.content.actions} color="#0D1B3E" />
 
               {(report.content.citations || []).length > 0 && (
-                <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+                <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '16px' }}>
                   <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '15px', fontWeight: '600', color: '#0D1B3E', marginBottom: '14px' }}>Data sources</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {(report.content.citations || []).map((cit, i) => (
@@ -184,6 +226,47 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {isPublication && (
+                <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px' }}>
+                  <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '15px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Repurpose</h3>
+                  <p style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '14px' }}>Turn this study into ready-to-post content. Generated fresh each time.</p>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: derivError || activeDeriv ? '16px' : '0' }}>
+                    {DERIVATIVES.map(d => (
+                      <button
+                        key={d.key}
+                        onClick={() => runDerivative(d.key)}
+                        disabled={!!derivLoading}
+                        style={{
+                          background: activeDeriv === d.key ? '#6D28D9' : 'transparent',
+                          color: activeDeriv === d.key ? '#fff' : '#6D28D9',
+                          border: '0.5px solid #6D28D9',
+                          borderRadius: '8px', padding: '7px 14px', fontSize: '13px', fontWeight: '500',
+                          cursor: derivLoading ? 'default' : 'pointer', fontFamily: 'DM Sans, sans-serif',
+                        }}
+                      >
+                        {derivLoading === d.key ? 'Writing...' : d.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {derivError && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#991B1B' }}>{derivError}</div>}
+
+                  {activeDeriv && derivText[activeDeriv] && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                        <button onClick={copyDeriv} style={{ background: derivCopied ? '#10B981' : '#EDE9FE', color: derivCopied ? '#fff' : '#6D28D9', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
+                          {derivCopied ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <div style={{ background: '#FAFAF8', border: '0.5px solid #F3F4F6', borderRadius: '10px', padding: '16px', fontSize: '13px', color: '#0D1B3E', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                        {derivText[activeDeriv]}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
