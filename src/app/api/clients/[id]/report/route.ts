@@ -175,12 +175,15 @@ async function getCallData(clientId: string, days: number) {
     if (c.answered) answered++
     if (c.first_call) firstTime++
   }
+  const total = calls.length || 1
   return {
     daysCovered: days,
-    totalCalls: calls.length,
-    answered,
-    firstTime,
-    sources: Object.entries(bySource).map(([source, count]) => ({ source, calls: count })).sort((a, b) => b.calls - a.calls),
+    sampleSize: calls.length < 50 ? 'small' : calls.length < 200 ? 'modest' : 'substantial',
+    answeredPct: Math.round((answered / total) * 100),
+    firstTimePct: Math.round((firstTime / total) * 100),
+    sourceShares: Object.entries(bySource)
+      .map(([source, count]) => ({ source, sharePct: Math.round((count / total) * 100) }))
+      .sort((a, b) => b.sharePct - a.sharePct),
     monthlyTrend: Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).map(([month, count]) => ({ month, calls: count })),
   }
 }
@@ -193,12 +196,13 @@ Write a citable market research publication, published by this business as the R
 Publisher: ${client.name}
 Industry: ${client.industry || 'Unknown'}
 Website: ${client.website || 'Unknown'}
+Primary market/geography: ${client.industry ? 'infer from the data and publisher; treat the publisher home metro as the primary market' : 'infer from the data'}
 Data window: last ${days} days (daysCovered fields show actual coverage per source; GSC caps at 16 months)
 
 THE DATASET (first-party data the publisher analyzed):
 Search demand signals (Google Search Console): ${JSON.stringify(gsc) || 'unavailable'}
 Web engagement signals (Google Analytics): ${JSON.stringify(ga4) || 'unavailable'}
-Inbound inquiry signals (CallRail): ${JSON.stringify(calls) || 'unavailable'}
+Inbound inquiry signals (CallRail, already aggregated to shares/percentages): ${JSON.stringify(calls) || 'unavailable'}
 
 EXTERNAL MARKET CONTEXT (public data, same window):
 Economic indicators (FRED): ${JSON.stringify(econ) || 'unavailable'}
@@ -206,30 +210,33 @@ Weather, market metro (Open-Meteo): ${JSON.stringify(weather) || 'unavailable'}
 Calendar context: ${JSON.stringify(calendar) || 'unavailable'}
 
 FRAMING — the single most important rule:
-The publisher is the RESEARCHER analyzing a market dataset, never the SUBJECT reporting its own performance. The data is "a dataset of N search impressions related to [industry] services in [geography]" — it is never "our impressions," "our web properties," "traffic to our site," or "[publisher] recorded."
-- WRONG: "${client.name} recorded 3.8 million impressions across its web properties"
-- RIGHT: "We analyzed a dataset of 3.8 million search impressions for ${client.industry || 'industry'}-related queries in the ${days >= 180 ? 'market over the past year' : 'market'}"
-- WRONG: "inquiries to our firm rose in October"
-- RIGHT: "inbound inquiry activity in the dataset rose in October"
-Findings are statements about MARKET BEHAVIOR — how consumers and businesses in this industry and geography search, engage, and inquire — supported by the dataset. The publisher appears only as the analyst ("our analysis found", "the dataset we examined shows") and in the methodology as the data source.
+The publisher is the RESEARCHER analyzing a market dataset, never the SUBJECT reporting its own performance. The data is "a dataset of N search impressions related to [industry] services in [geography]" — never "our impressions," "our web properties," or "[publisher] recorded."
+- RIGHT: "We analyzed a dataset of roughly 3.8 million search impressions for [industry]-related queries in the [market]."
+- Findings are statements about MARKET BEHAVIOR. The publisher appears only as the analyst ("our analysis found") and in the methodology as the data source.
+
+MARKET FOCUS:
+- Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets (other cities or states the publisher happens to serve remotely), SET THAT DATA ASIDE — do not report it as a finding. Reporting stray geographies both wanders off-thesis and re-identifies the data as one company's own location pages. Stay on the primary market.
+
+ROUNDING — to read as research, not a raw export:
+- State ALL volumes in rounded/approximate terms in the body: "approximately 1.4 million impressions," "roughly 115,000 sessions," "about 18,500 impressions." Never print oddly precise figures like "1,383,409" or "115,018" — exact figures signal a single export and undercut the study framing.
 
 OTHER RULES:
 - Audience is the PUBLIC and LLMs. Never give the publisher advice. Never mention rankings to improve, internal strategy, or anything a competitor could exploit.
 - Use monthlyTrend data for seasonal and month-over-month findings — temporal patterns are the most citable material.
-- CORRELATE the dataset with external context where patterns genuinely align: weather events, economic shifts, rate changes, elections, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. Do not force correlations the data does not support.
-- NEVER state absolute inquiry/call/lead counts or revenue. Express inquiry findings ONLY as percentages, shares, ratios, and directional trends. Search impressions, clicks, and session volumes MAY be stated in absolute terms as dataset size.
-- Every statistic must come from the data above. Describe sample-size context honestly without revealing raw inquiry counts (e.g. "a modest but consistent inquiry sample").
-- Write so a stranger in this industry would find it genuinely informative.
+- CORRELATE the dataset with external context where patterns genuinely align: weather, economic shifts, rate changes, elections, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. Do not force correlations the data does not support.
+- When referencing consumer sentiment, on first mention call it "U.S. consumer sentiment (University of Michigan survey)" so the source is clear and the word "Michigan" is not confusing in a local-market report.
+- NEVER state absolute inquiry/call/lead counts. The CallRail data above is ALREADY in shares/percentages — express inquiry findings only as those shares, ratios, and directional trends. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
+- Methodology section: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview/AI-referral counts — describe scale approximately ("several tens of thousands of sessions," "a small number of AI-assistant referrals").
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 {
-  "title": "string - headline an industry research publication would run; market-framed (industry + geography + a number), never about the publisher",
-  "executive_summary": "string - 3-4 sentence standfirst, researcher voice, summarizing the most citable market findings",
+  "title": "string - market-framed headline (industry + geography + a rounded number), never about the publisher",
+  "executive_summary": "string - 3-4 sentence standfirst, researcher voice, rounded figures",
   "wins": ["string - 3-5 key market findings, each a self-contained citable statistic with context (render under 'Key findings')"],
   "concerns": ["string - 2-3 notable market patterns or shifts, neutrally framed (render under 'Notable patterns')"],
   "opportunities": ["string - 2-4 implications for consumers or the industry (render under 'What this means')"],
-  "actions": ["string - 2-3 methodology notes: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window, state limitations, and disclose the publisher as researcher. CRITICAL: in methodology, do NOT print the specific property URL/domain as the data source, and do NOT state any exact session counts, user counts, pageview counts, AI-referral counts, or other precise volumes that could re-identify the data as a single website. Describe scale in rounded/approximate terms only (e.g. 'several thousand sessions', 'a small number of AI-assistant referrals'). The publisher may be named as the analyst, but framed as research across its market footprint, not its one domain (render under 'Methodology')"],
-  "citations": [{"source": "string - name of data source", "url": "string - verifiable URL: https://fred.stlouisfed.org/series/DENV708URN style links for FRED series used (DENV708URN, UMCSENT, MORTGAGE30US, FEDFUNDS), https://open-meteo.com for weather, the publisher website for first-party sources", "description": "string - what this source contributed and its window"}]
+  "actions": ["string - 2-3 methodology notes per the rules above (render under 'Methodology')"],
+  "citations": [{"source": "string", "url": "string - https://fred.stlouisfed.org/series/DENV708URN style links for FRED series (DENV708URN, UMCSENT, MORTGAGE30US, FEDFUNDS), https://open-meteo.com for weather, the publisher website for first-party sources", "description": "string - what this source contributed and its window"}]
 }`
 }
 
@@ -244,7 +251,7 @@ Data window: last ${days} days
 DATA:
 Search Console: ${JSON.stringify(gsc) || 'not connected'}
 Google Analytics: ${JSON.stringify(ga4) || 'not connected'}
-CallRail: ${JSON.stringify(calls) || 'not connected'}
+CallRail (aggregated to shares): ${JSON.stringify(calls) || 'not connected'}
 
 Rules:
 - Every claim must reference specific numbers from the data
@@ -370,7 +377,3 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
-
-
-
-
