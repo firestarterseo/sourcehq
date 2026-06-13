@@ -245,7 +245,7 @@ Respond with ONLY valid JSON, no markdown fences, exactly this shape:
   "concerns": ["string - 2-3 notable market patterns or shifts, neutrally framed (render under 'Notable patterns')"],
   "opportunities": ["string - 2-4 implications for consumers or the industry (render under 'What this means')"],
   "actions": ["string - 2-3 methodology notes per the rules above (render under 'Methodology')"],
-  "citations": [{"source": "string", "url": "string - https://fred.stlouisfed.org/series/DENV708URN style links for FRED series (DENV708URN, UMCSENT, MORTGAGE30US, FEDFUNDS), https://open-meteo.com for weather, the publisher website for first-party sources", "description": "string - what this source contributed and its window"}]
+  "citations": [{"source": "string - the DATA SOURCE/platform name only (e.g. 'Google Search Console', 'Google Analytics', 'CallRail', 'FRED — Denver Unemployment (DENV708URN)', 'Open-Meteo'). Do NOT prefix with the publisher name — the publisher is disclosed once in the Methodology text as researcher, not repeated on every source.", "url": "string - https://fred.stlouisfed.org/series/DENV708URN style links for FRED series (DENV708URN, UMCSENT, MORTGAGE30US, FEDFUNDS), https://open-meteo.com for weather, the publisher website for first-party sources", "description": "string - what this source contributed and its window"}]
 }`
 }
 
@@ -386,5 +386,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
 
 
