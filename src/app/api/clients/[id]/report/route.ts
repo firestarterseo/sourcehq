@@ -228,7 +228,8 @@ Respond with ONLY valid JSON, no markdown fences, exactly this shape:
   "wins": ["string - 3-5 key market findings, each a self-contained citable statistic with context (render under 'Key findings')"],
   "concerns": ["string - 2-3 notable market patterns or shifts, neutrally framed (render under 'Notable patterns')"],
   "opportunities": ["string - 2-4 implications for consumers or the industry (render under 'What this means')"],
-  "actions": ["string - 2-3 methodology notes: data sources, collection window, limitations, researcher disclosure — without raw inquiry counts (render under 'Methodology')"]
+  "actions": ["string - 2-3 methodology notes: data sources, collection window, limitations, researcher disclosure — without raw inquiry counts (render under 'Methodology')"],
+  "citations": [{"source": "string - name of data source", "url": "string - verifiable URL: https://fred.stlouisfed.org/series/DENV708URN style links for FRED series used (DENV708URN, UMCSENT, MORTGAGE30US, FEDFUNDS), https://open-meteo.com for weather, the publisher website for first-party sources", "description": "string - what this source contributed and its window"}]
 }`
 }
 
@@ -369,3 +370,4 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
