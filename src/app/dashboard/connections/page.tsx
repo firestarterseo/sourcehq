@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -91,19 +91,19 @@ function ConnectionsContent() {
         )}
         {loadError && (
           <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#92400E' }}>
-            {loadError} — connection status may be out of date. Try refreshing, or signing out and back in.
+            {loadError} â€” connection status may be out of date. Try refreshing, or signing out and back in.
           </div>
         )}
 
         <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '20px', fontWeight: '600', color: '#0D1B3E', marginBottom: '6px' }}>Agency connections</h2>
         <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '20px' }}>
-          Connect once here. Every client can then pull data from these accounts — just pick their property or company on the client page. Clients with their own accounts can still be connected individually there.
+          Connect once here. Every client can then pull data from these accounts â€” just pick their property or company on the client page. Clients with their own accounts can still be connected individually there.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <ConnectionRow
             name="Google (GSC, GA4, GBP, Ads)"
-            description="Connect Firestarter's Google account — covers every client property it can access"
+            description="Connect Firestarter's Google account â€” covers every client property it can access"
             connected={googleConnected}
             detail={googleEmail ? `Connected as ${googleEmail}` : null}
             action={
@@ -115,14 +115,14 @@ function ConnectionsContent() {
 
           <ConnectionRow
             name="CallRail"
-            description="Agency API key — set as CALLRAIL_AGENCY_KEY in Vercel environment variables"
+            description="Agency API key â€” set as CALLRAIL_AGENCY_KEY in Vercel environment variables"
             connected={callrailConfigured}
-            detail={callrailName ? `Connected · ${callrailName}` : null}
+            detail={callrailName ? `Connected Â· ${callrailName}` : null}
           />
 
-          <ConnectionRow name="Ahrefs" description="Coming soon — agency API key" connected={false} />
-          <ConnectionRow name="SEMrush" description="Coming soon — agency API key" connected={false} />
-          <ConnectionRow name="Weather & economic data" description="Coming soon — powers unique SOURCE report insights" connected={false} />
+          <ConnectionRow name="Ahrefs" description="Coming soon â€” agency API key" connected={false} />
+          <ConnectionRow name="SEMrush" description="Coming soon â€” agency API key" connected={false} />
+          <ConnectionRow name="Weather & economic data" description="Coming soon â€” powers unique SOURCE report insights" connected={false} />
         </div>
 
         {!status && (
