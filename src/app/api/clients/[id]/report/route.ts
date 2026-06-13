@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import { getGoogleAuth } from '@/lib/google-auth'
 import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/external-data'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const GSC_API = 'https://searchconsole.googleapis.com/webmasters/v3'
 const DATA_API = 'https://analyticsdata.googleapis.com/v1beta'
@@ -370,5 +370,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
 
 
