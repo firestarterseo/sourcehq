@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
-import { createServerClient } from '@supabase/ssr'
+﻿import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { getGoogleAuth } from '@/lib/google-auth'
 
 const DATA_API = 'https://analyticsdata.googleapis.com/v1beta'
 
@@ -20,59 +20,6 @@ async function getSession() {
     }
   )
   return supabase.auth.getSession()
-}
-
-function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-}
-
-async function refreshTokenIfNeeded(credentials: any, clientId: string) {
-  if (Date.now() < credentials.expires_at - 60000) {
-    return credentials.access_token
-  }
-
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      refresh_token: credentials.refresh_token,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      grant_type: 'refresh_token',
-    }),
-  })
-
-  const tokens = await res.json()
-
-  if (!tokens.access_token) {
-    if (tokens.error === 'invalid_grant') {
-      await adminClient()
-        .from('data_connections')
-        .update({ status: 'disconnected' })
-        .eq('client_id', clientId)
-        .eq('source_type', 'google')
-      throw new Error('REVOKED')
-    }
-    throw new Error(`Failed to refresh token: ${tokens.error ?? 'unknown'}`)
-  }
-
-  const newCredentials = {
-    ...credentials,
-    access_token: tokens.access_token,
-    expires_at: Date.now() + (tokens.expires_in * 1000),
-  }
-
-  await adminClient()
-    .from('data_connections')
-    .update({ credentials: newCredentials })
-    .eq('client_id', clientId)
-    .eq('source_type', 'google')
-
-  return tokens.access_token
 }
 
 async function runReport(token: string, property: string, body: Record<string, unknown>) {
@@ -98,48 +45,39 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  const { data: connection } = await adminClient()
-    .from('data_connections')
-    .select('credentials, status')
-    .eq('client_id', id)
-    .eq('source_type', 'google')
-    .single()
-
-  if (!connection || connection.status !== 'connected') {
-    return NextResponse.json({ connected: false })
+  const auth = await getGoogleAuth(id)
+  if (!auth.token) {
+    return NextResponse.json({ connected: false, revoked: auth.revoked || false })
   }
 
-  // Use the property chosen by the user — no more guessing
-  const property = connection.credentials.ga4_property
+  const property = auth.selection.ga4_property
   if (!property) {
     return NextResponse.json({ connected: true, needsSelection: true })
   }
 
   try {
-    const accessToken = await refreshTokenIfNeeded(connection.credentials, id)
-
     const dateRanges = [{ startDate: '28daysAgo', endDate: 'yesterday' }]
 
     const [totalsReport, dailyReport, pagesReport, channelsReport] = await Promise.all([
-      runReport(accessToken, property, {
+      runReport(auth.token, property, {
         dateRanges,
         metrics: [{ name: 'sessions' }, { name: 'totalUsers' }, { name: 'screenPageViews' }],
       }),
-      runReport(accessToken, property, {
+      runReport(auth.token, property, {
         dateRanges,
         dimensions: [{ name: 'date' }],
         metrics: [{ name: 'sessions' }],
         orderBys: [{ dimension: { dimensionName: 'date' } }],
         limit: 31,
       }),
-      runReport(accessToken, property, {
+      runReport(auth.token, property, {
         dateRanges,
         dimensions: [{ name: 'landingPage' }],
         metrics: [{ name: 'sessions' }],
         orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
         limit: 10,
       }),
-      runReport(accessToken, property, {
+      runReport(auth.token, property, {
         dateRanges,
         dimensions: [{ name: 'sessionDefaultChannelGroup' }],
         metrics: [{ name: 'sessions' }],
@@ -152,7 +90,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
     return NextResponse.json({
       connected: true,
-      propertyName: connection.credentials.ga4_property_name || property,
+      mode: auth.mode,
+      propertyName: auth.selection.ga4_property_name || property,
       summary: {
         sessions: Number(totalsRow[0]?.value || 0),
         users: Number(totalsRow[1]?.value || 0),
@@ -173,9 +112,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       })),
     })
   } catch (err: any) {
-    if (err.message === 'REVOKED') {
-      return NextResponse.json({ connected: false, revoked: true })
-    }
     if (err.status === 403) {
       return NextResponse.json({
         connected: true,
