@@ -331,7 +331,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2500,
+      max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
@@ -370,4 +370,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
 
