@@ -333,7 +333,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 {googleConnected ? (
                   <>
                     <Link href={`/dashboard/clients/${id}/data/gsc`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>View data</Link>
-                    <button onClick={() => setShowGooglePicker(!showGooglePicker)} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Properties</button>
+                    <button onClick={() => setShowGooglePicker(!showGooglePicker)} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Manage</button>
                   </>
                 ) : (
                   <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: '500', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>Connect</a>
@@ -354,8 +354,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 {crConnected ? (
                   <>
                     <Link href={`/dashboard/clients/${id}/data/callrail`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>View data</Link>
-                    <button onClick={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Change</button>
-                    <button onClick={handleDisconnectCallrail} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Disconnect</button>
+                    <button onClick={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Manage</button>
                   </>
                 ) : (
                   <button onClick={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Connect</button>
@@ -411,7 +410,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <input type="password" value={callrailKey} onChange={e => setCallrailKey(e.target.value)} placeholder="From their CallRail Settings → Integrations" style={inputStyle} />
                 </div>
               )}
-              <div><button onClick={handleConnectCallrail} disabled={callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim())} style={{ background: callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim()) ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{callrailSaving ? 'Connecting...' : 'Save & connect'}</button></div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}><button onClick={handleConnectCallrail} disabled={callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim())} style={{ background: callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim()) ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{callrailSaving ? 'Connecting...' : 'Save & connect'}</button>{crConnected && <button onClick={handleDisconnectCallrail} style={{ background: 'transparent', color: '#DC2626', border: '0.5px solid #DC2626', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Disconnect</button>}</div>
             </div>
           )}
         </div>
@@ -419,5 +418,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
 
 
