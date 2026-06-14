@@ -115,14 +115,14 @@ function ConnectionsContent() {
 
           <ConnectionRow
             name="CallRail"
-            description="Agency API key â€” set as CALLRAIL_AGENCY_KEY in Vercel environment variables"
+            description="Agency API key — set as CALLRAIL_AGENCY_KEY in Vercel environment variables"
             connected={callrailConfigured}
-            detail={callrailName ? `Connected Â· ${callrailName}` : null}
+            detail={callrailName ? `Connected · ${callrailName}` : null}
           />
 
-          <ConnectionRow name="Ahrefs" description="Coming soon â€” agency API key" connected={false} />
-          <ConnectionRow name="SEMrush" description="Coming soon â€” agency API key" connected={false} />
-          <ConnectionRow name="Weather & economic data" description="Coming soon â€” powers unique SOURCE report insights" connected={false} />
+          <ConnectionRow name="Ahrefs" description="Coming soon — agency API key" connected={false} />
+          <ConnectionRow name="SEMrush" description="Coming soon — agency API key" connected={false} />
+          <ConnectionRow name="Weather & economic data" description="Coming soon — powers unique SOURCE report insights" connected={false} />
         </div>
 
         {!status && (
@@ -143,3 +143,4 @@ export default function ConnectionsPage() {
     </div>
   )
 }
+
