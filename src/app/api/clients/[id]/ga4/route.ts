@@ -40,8 +40,10 @@ async function runReport(token: string, property: string, body: Record<string, u
   return json
 }
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const daysParam = Number(new URL(request.url).searchParams.get('days'))
+  const days = [28, 90, 180, 365, 730].includes(daysParam) ? daysParam : 28
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
@@ -56,7 +58,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   }
 
   try {
-    const dateRanges = [{ startDate: '28daysAgo', endDate: 'yesterday' }]
+    const dateRanges = [{ startDate: ${days}daysAgo, endDate: 'yesterday' }]
 
     const [totalsReport, dailyReport, pagesReport, channelsReport] = await Promise.all([
       runReport(auth.token, property, {
@@ -68,7 +70,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         dimensions: [{ name: 'date' }],
         metrics: [{ name: 'sessions' }],
         orderBys: [{ dimension: { dimensionName: 'date' } }],
-        limit: 31,
+        limit: days + 2,
       }),
       runReport(auth.token, property, {
         dateRanges,
@@ -96,7 +98,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         sessions: Number(totalsRow[0]?.value || 0),
         users: Number(totalsRow[1]?.value || 0),
         pageviews: Number(totalsRow[2]?.value || 0),
-        period: 'Last 28 days',
+        period: Last  days,
       },
       daily: (dailyReport.rows || []).map((row: any) => ({
         date: `${row.dimensionValues[0].value.slice(0, 4)}-${row.dimensionValues[0].value.slice(4, 6)}-${row.dimensionValues[0].value.slice(6, 8)}`,
@@ -121,3 +123,4 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+

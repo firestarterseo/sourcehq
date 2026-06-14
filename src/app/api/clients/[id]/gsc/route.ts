@@ -60,14 +60,14 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
   try {
     const end = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-    const start = new Date(end.getTime() - 28 * 24 * 60 * 60 * 1000)
+    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000)
     const range = {
       startDate: start.toISOString().split('T')[0],
       endDate: end.toISOString().split('T')[0],
     }
 
     const [daily, queries, pages] = await Promise.all([
-      gscQuery(auth.token, property, { ...range, dimensions: ['date'], rowLimit: 31 }),
+      gscQuery(auth.token, property, { ...range, dimensions: ['date'], rowLimit: days + 2 }),
       gscQuery(auth.token, property, { ...range, dimensions: ['query'], rowLimit: 10 }),
       gscQuery(auth.token, property, { ...range, dimensions: ['page'], rowLimit: 10 }),
     ])
@@ -94,7 +94,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         impressions: totals.impressions,
         ctr: avgCtr,
         position: avgPosition,
-        period: 'Last 28 days',
+        period: Last  days,
       },
       daily: (daily.rows || []).map((row: any) => ({
         date: row.keys[0],
@@ -126,3 +126,4 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+

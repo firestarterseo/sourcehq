@@ -98,11 +98,13 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ success: true })
 }
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
+  const daysParam = Number(new URL(request.url).searchParams.get('days'))
+  const days = [28, 90, 180, 365, 730].includes(daysParam) ? daysParam : 28
   const { data: connection } = await adminClient()
     .from('data_connections')
     .select('credentials, status')
@@ -145,7 +147,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
   try {
     const end = new Date()
-    const start = new Date(end.getTime() - 28 * 24 * 60 * 60 * 1000)
+    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000)
     const startDate = start.toISOString().split('T')[0]
     const endDate = end.toISOString().split('T')[0]
 
@@ -200,7 +202,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         missed: calls.length - answered,
         firstTime,
         avgDurationSec: calls.length ? Math.round(totalDuration / calls.length) : 0,
-        period: 'Last 28 days',
+        period: Last  days,
       },
       daily,
       sources,
@@ -209,3 +211,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+
+
+
