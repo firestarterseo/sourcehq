@@ -332,7 +332,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <div style={{ marginTop: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
                 {googleConnected ? (
                   <>
-                    <Link href={`/dashboard/clients/${id}/data/gsc`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>View data</Link>
+                    <Link href={`/dashboard/clients/${id}/data/gsc`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>Search</Link>
+                    <Link href={`/dashboard/clients/${id}/data/ga4`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>Traffic</Link>
                     <button onClick={() => setShowGooglePicker(!showGooglePicker)} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Manage</button>
                   </>
                 ) : (
@@ -418,6 +419,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
 
 
 
