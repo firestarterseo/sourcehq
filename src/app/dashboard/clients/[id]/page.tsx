@@ -230,8 +230,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       <Sidebar active="Clients" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none' }}>← Clients</Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+            <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', flexShrink: 0 }}>← Clients</Link>
             <span style={{ color: '#E5E5E3' }}>|</span>
             <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>{client.name}</span>
             <span style={{ fontSize: '12px', color: '#9CA3AF' }}>{client.industry || 'No industry'}{client.website ? ` · ${client.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : ''}</span>
@@ -242,7 +242,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        <div style={{ padding: '32px', maxWidth: '860px' }}>
+        <div style={{ padding: '32px', maxWidth: '1080px' }}>
           {error && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>}
 
           {showDeleteConfirm && (
@@ -419,6 +419,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
 
 
 
