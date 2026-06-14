@@ -43,7 +43,9 @@ async function gscQuery(token: string, property: string, body: Record<string, un
   return json
 }
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const daysParam = Number(new URL(request.url).searchParams.get('days'))
+  const days = [28, 90, 180, 365, 730].includes(daysParam) ? daysParam : 28
   const { id } = await params
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -126,6 +128,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+
+
 
 
 
