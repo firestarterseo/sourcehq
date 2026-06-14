@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
-    const dateRanges = [{ startDate: ${days}daysAgo, endDate: 'yesterday' }]
+    const dateRanges = [{ startDate: `${days}daysAgo`, endDate: 'yesterday' }]
 
     const [totalsReport, dailyReport, pagesReport, channelsReport] = await Promise.all([
       runReport(auth.token, property, {
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         sessions: Number(totalsRow[0]?.value || 0),
         users: Number(totalsRow[1]?.value || 0),
         pageviews: Number(totalsRow[2]?.value || 0),
-        period: Last  days,
+        period: `Last ${days} days`,
       },
       daily: (dailyReport.rows || []).map((row: any) => ({
         date: `${row.dimensionValues[0].value.slice(0, 4)}-${row.dimensionValues[0].value.slice(4, 6)}-${row.dimensionValues[0].value.slice(6, 8)}`,
@@ -123,4 +123,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+
 

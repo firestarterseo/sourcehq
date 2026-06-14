@@ -94,7 +94,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         impressions: totals.impressions,
         ctr: avgCtr,
         position: avgPosition,
-        period: Last  days,
+        period: `Last ${days} days`,
       },
       daily: (daily.rows || []).map((row: any) => ({
         date: row.keys[0],
@@ -126,4 +126,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+
+
 

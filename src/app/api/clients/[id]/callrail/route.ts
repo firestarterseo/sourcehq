@@ -202,7 +202,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         missed: calls.length - answered,
         firstTime,
         avgDurationSec: calls.length ? Math.round(totalDuration / calls.length) : 0,
-        period: Last  days,
+        period: `Last ${days} days`,
       },
       daily,
       sources,
@@ -211,6 +211,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+
 
 
 
