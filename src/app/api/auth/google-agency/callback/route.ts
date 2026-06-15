@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+﻿import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
 const FIRESTARTER_ORG_ID = 'd3acaf18-a924-4d25-8f5a-99b6893ae843'
@@ -54,13 +54,16 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = adminClient()
-  await supabase.from('agency_connections').delete().eq('org_id', FIRESTARTER_ORG_ID).eq('source_type', 'google')
+  await supabase.from('agency_connections').delete().eq('org_id', FIRESTARTER_ORG_ID).eq('source_type', 'google').eq('account_email', email)
   await supabase.from('agency_connections').insert({
     org_id: FIRESTARTER_ORG_ID,
     source_type: 'google',
+      account_email: email,
     status: 'connected',
     credentials,
   })
 
   return NextResponse.redirect('https://sourcehq.vercel.app/dashboard/connections?connected=google')
 }
+
+

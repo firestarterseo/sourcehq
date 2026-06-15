@@ -35,6 +35,7 @@ export interface GoogleAuth {
     ga4_property_name: string | null
       gbp_location: string | null
       gbp_location_name: string | null
+      google_account: string | null
   }
 }
 
@@ -59,6 +60,7 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
     ga4_property_name: clientConn?.credentials?.ga4_property_name ?? null,
       gbp_location: clientConn?.credentials?.gbp_location ?? null,
       gbp_location_name: clientConn?.credentials?.gbp_location_name ?? null,
+      google_account: clientConn?.credentials?.google_account ?? null,
   }
 
   // Mode 1: client has their own working Google connection
@@ -136,7 +138,7 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
 /** Save per-client property selections (works in agency or client mode). */
 export async function saveGoogleSelection(
   clientId: string,
-  patch: { gsc_property?: string | null; ga4_property?: string | null; ga4_property_name?: string | null; gbp_location?: string | null; gbp_location_name?: string | null }
+  patch: { gsc_property?: string | null; ga4_property?: string | null; ga4_property_name?: string | null; gbp_location?: string | null; gbp_location_name?: string | null; google_account?: string | null }
 ) {
   const supabase = adminClient()
   const { data: existing } = await supabase
@@ -166,14 +168,20 @@ export async function getAgencyGoogleStatus() {
   const supabase = adminClient()
   const { data } = await supabase
     .from('agency_connections')
-    .select('credentials, status')
+    .select('credentials, status, account_email')
     .eq('org_id', FIRESTARTER_ORG_ID)
     .eq('source_type', 'google')
-    .single()
+  const rows = data || []
+  const accounts = rows
+    .filter((r: any) => r.status === 'connected')
+    .map((r: any) => ({ email: r.account_email || r.credentials?.email || 'Unknown account' }))
   return {
-    connected: !!data && data.status === 'connected',
-    email: data?.credentials?.email || null,
+    connected: accounts.length > 0,
+    email: accounts[0]?.email || null,
+    accounts,
   }
 }
+
+
 
 
