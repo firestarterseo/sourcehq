@@ -323,7 +323,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
 
   const region = getRegion(client.region)
-  client.regionLabel = region.label
+  ;(client as any).regionLabel = region.label
   const [gsc, ga4, calls, econ, weather] = await Promise.all([
     getGscData(id, days),
     getGa4Data(id, days),
@@ -389,6 +389,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
+
+
+
+
 
 
 
