@@ -44,7 +44,7 @@ export default function NewClientPage() {
         setLoading(false)
         return
       }
-      router.push('/dashboard/clients')
+      router.push('/dashboard/clients/' + data.client.id)
       router.refresh()
     } catch (e: any) {
       setError('Unexpected error: ' + e.message)
@@ -106,6 +106,7 @@ export default function NewClientPage() {
     </div>
   )
 }
+
 
 
 
