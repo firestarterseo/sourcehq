@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+﻿import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,7 +15,7 @@ function adminClient() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, industry, website } = body
+    const { name, industry, website, region } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Client name is required' }, { status: 400 })
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     const { data: client, error } = await adminClient()
       .from('clients')
-      .insert({ org_id: FIRESTARTER_ORG_ID, name, industry, website, active: true })
+      .insert({ org_id: FIRESTARTER_ORG_ID, name, industry, website, region, active: true })
       .select()
       .single()
 

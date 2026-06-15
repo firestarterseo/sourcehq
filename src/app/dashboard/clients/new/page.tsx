@@ -1,9 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
+import { REGIONS } from '@/lib/regions'
 
 const industries = [
   'HVAC', 'Plumbing', 'Roofing', 'Electrical', 'Windows & Doors',
@@ -25,7 +26,7 @@ export default function NewClientPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ name: '', industry: '', website: '' })
+  const [form, setForm] = useState({ name: '', industry: '', website: '', region: '' })
 
   async function handleSubmit() {
     if (!form.name) return
@@ -56,7 +57,7 @@ export default function NewClientPage() {
       <Sidebar active="Clients" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center' }}>
-          <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', marginRight: '12px' }}>← Clients</Link>
+          <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', marginRight: '12px' }}>â† Clients</Link>
           <span style={{ color: '#E5E5E3', marginRight: '12px' }}>|</span>
           <span style={{ fontSize: '15px', fontWeight: '600', color: '#0D1B3E' }}>Add client</span>
         </div>
@@ -80,6 +81,13 @@ export default function NewClientPage() {
                 {industries.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
             </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Region / market</label>
+                <select value={form.region} onChange={e => setForm({ ...form, region: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }}>
+                  <option value="">Select region...</option>
+                  {REGIONS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+                </select>
+              </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Website</label>
               <input type="text" placeholder="e.g. https://denverheating.com" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px', fontSize: '13px', color: '#0D1B3E', fontFamily: 'DM Sans, sans-serif', outline: 'none', background: '#fff' }} />
@@ -98,3 +106,5 @@ export default function NewClientPage() {
     </div>
   )
 }
+
+

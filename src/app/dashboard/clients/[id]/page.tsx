@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import GenerateReportButton from '@/components/GenerateReportButton'
 import DataSourceTiles from '@/components/DataSourceTiles'
+import { REGIONS } from '@/lib/regions'
 import { Search, BarChart3, Phone, Link2 } from 'lucide-react'
 
 interface Client {
@@ -67,7 +68,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({ name: '', industry: '', website: '' })
+  const [form, setForm] = useState({ name: '', industry: '', website: '', region: '' })
 
   const [reports, setReports] = useState<ReportRow[] | null>(null)
   const [confirmReportId, setConfirmReportId] = useState<string | null>(null)
@@ -128,7 +129,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       .then(data => {
         if (data.client) {
           setClient(data.client)
-          setForm({ name: data.client.name, industry: data.client.industry || '', website: data.client.website || '' })
+          setForm({ name: data.client.name, industry: data.client.industry || '', website: data.client.website || '', region: data.client.region || '' })
         }
         setLoading(false)
       })
@@ -263,6 +264,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div><label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Client name *</label><input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} /></div>
                 <div><label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Industry</label><select value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} style={selectStyle}><option value="">Select industry...</option>{industries.map(i => <option key={i} value={i}>{i}</option>)}</select></div>
+                <div><label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Region / market</label><select value={form.region} onChange={e => setForm({ ...form, region: e.target.value })} style={selectStyle}><option value="">Select region...</option>{REGIONS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}</select></div>
                 <div><label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#0D1B3E', marginBottom: '6px' }}>Website</label><input type="text" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={inputStyle} /></div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button onClick={handleSave} disabled={saving || !form.name} style={{ background: saving || !form.name ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{saving ? 'Saving...' : 'Save changes'}</button>
@@ -367,6 +369,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
+
+
+
 
 
 

@@ -23,9 +23,9 @@ async function fredSeries(seriesId: string, days: number) {
   }
 }
 
-export async function getEconomicData(days: number) {
+export async function getEconomicData(days: number, fredUnemployment: string | null = 'DENV708URN') {
   const [denverUnemployment, consumerSentiment, mortgage30, fedFunds] = await Promise.all([
-    fredSeries('DENV708URN', days),   // Denver-Aurora-Lakewood unemployment rate
+    fredSeries(fredUnemployment || 'UNRATE', days),   // metro unemployment, or national fallback
     fredSeries('UMCSENT', days),      // University of Michigan consumer sentiment
     fredSeries('MORTGAGE30US', days), // 30-year fixed mortgage average
     fredSeries('FEDFUNDS', days),     // Federal funds effective rate
@@ -42,19 +42,19 @@ export async function getEconomicData(days: number) {
   }
 
   return {
-    denver_unemployment_rate_pct: thin(denverUnemployment),
+    local_unemployment_rate_pct: thin(denverUnemployment),
     us_consumer_sentiment_index: thin(consumerSentiment),
     us_30yr_mortgage_rate_pct: thin(mortgage30),
     fed_funds_rate_pct: thin(fedFunds),
   }
 }
 
-export async function getWeatherData(days: number, lat = 39.7392, lon = -104.9903) {
+export async function getWeatherData(days: number, lat = 39.7392, lon = -104.9903, timezone = 'America/Denver') {
   try {
     const cappedDays = Math.min(days, 730)
     const start = isoDaysAgo(cappedDays)
     const end = isoDaysAgo(3) // archive API lags a couple days
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${start}&end_date=${end}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=America%2FDenver`
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${start}&end_date=${end}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=${encodeURIComponent(timezone)}`
     const res = await fetch(url)
     if (!res.ok) return null
     const json = await res.json()
@@ -77,7 +77,7 @@ export async function getWeatherData(days: number, lat = 39.7392, lon = -104.990
     const avg = (a: number[]) => a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length) : null
 
     return {
-      location: 'Denver metro',
+      location: ${lat},${lon},
       monthly: Object.entries(months).map(([month, v]) => ({
         month,
         avg_high_f: avg(v.highs),
@@ -126,3 +126,7 @@ export function getCalendarContext(days: number) {
     upcoming_events: upcoming,
   }
 }
+
+
+
+

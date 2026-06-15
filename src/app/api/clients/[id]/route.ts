@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+﻿import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
@@ -49,11 +49,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   const body = await request.json()
-  const { name, industry, website } = body
+  const { name, industry, website, region } = body
 
   const { data: client, error } = await adminClient()
     .from('clients')
-    .update({ name, industry, website })
+    .update({ name, industry, website, region })
     .eq('id', id)
     .select()
     .single()

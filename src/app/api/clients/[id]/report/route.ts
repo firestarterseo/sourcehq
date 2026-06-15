@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getGoogleAuth } from '@/lib/google-auth'
 import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/external-data'
+import { getRegion } from '@/lib/regions'
 
 export const maxDuration = 300
 
@@ -205,7 +206,7 @@ Write a citable market research publication, published by this business as the R
 Publisher: ${client.name}
 Industry: ${client.industry || 'Unknown'}
 Website: ${client.website || 'Unknown'}
-Primary market/geography: ${client.industry ? 'infer from the data and publisher; treat the publisher home metro as the primary market' : 'infer from the data'}
+Primary market/geography: ${client.regionLabel || 'the publisher home market'}
 Data window: last ${days} days (daysCovered fields show actual coverage per source; GSC caps at 16 months)
 
 THE DATASET (first-party data the publisher analyzed):
@@ -315,18 +316,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { data: client } = await adminClient()
     .from('clients')
-    .select('name, industry, website')
+    .select('name, industry, website, region')
     .eq('id', id)
     .single()
 
   if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
 
+  const region = getRegion(client.region)
+  client.regionLabel = region.label
   const [gsc, ga4, calls, econ, weather] = await Promise.all([
     getGscData(id, days),
     getGa4Data(id, days),
     getCallData(id, days),
-    reportType === 'publication' ? getEconomicData(days) : Promise.resolve(null),
-    reportType === 'publication' ? getWeatherData(days) : Promise.resolve(null),
+    reportType === 'publication' ? getEconomicData(days, region.fredUnemployment) : Promise.resolve(null),
+    reportType === 'publication' ? getWeatherData(days, region.lat, region.lon, region.timezone, region.label) : Promise.resolve(null),
   ])
   const calendar = reportType === 'publication' ? getCalendarContext(days) : null
 
@@ -386,6 +389,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
+
+
+
+
+
+
+
 
 
 
