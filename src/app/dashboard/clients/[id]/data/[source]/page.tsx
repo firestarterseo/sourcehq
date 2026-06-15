@@ -113,6 +113,8 @@ export default function DataDetailPage({ params }: { params: Promise<{ id: strin
             <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading {meta.title} data...</p>
           ) : !data || data.connected === false ? (
             <p style={{ fontSize: '13px', color: '#6B7280' }}>Not connected, or no data available for this window.</p>
+          ) : data.needsSelection ? (
+            <div style={{ background: '#EFF6FF', border: '0.5px solid #BFDBFE', borderRadius: '8px', padding: '16px', fontSize: '13px', color: '#1E40AF' }}>No property selected for this data source yet. Go to the <Link href={`/dashboard/clients/${id}`} style={{ color: '#1D4ED8', fontWeight: 500 }}>client page</Link> and choose one under Manage.</div>
           ) : data.error ? (
             <div style={{ background: '#FFFBEB', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#92400E' }}>{data.error}</div>
           ) : (
@@ -184,4 +186,7 @@ export default function DataDetailPage({ params }: { params: Promise<{ id: strin
     </div>
   )
 }
+
+
+
 
