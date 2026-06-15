@@ -15,10 +15,11 @@ export async function GET(_: NextRequest) {
     response_type: 'code',
     scope: scopes,
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: 'select_account consent',
   })
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`)
 }
+
 
 
