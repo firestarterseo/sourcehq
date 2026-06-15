@@ -77,7 +77,7 @@ export async function getWeatherData(days: number, lat = 39.7392, lon = -104.990
     const avg = (a: number[]) => a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length) : null
 
     return {
-      location: ${lat},${lon},
+      location: label,
       monthly: Object.entries(months).map(([month, v]) => ({
         month,
         avg_high_f: avg(v.highs),
@@ -126,6 +126,7 @@ export function getCalendarContext(days: number) {
     upcoming_events: upcoming,
   }
 }
+
 
 
 
