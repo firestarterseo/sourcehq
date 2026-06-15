@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+﻿import { createClient } from '@supabase/supabase-js'
 
 const FIRESTARTER_ORG_ID = 'd3acaf18-a924-4d25-8f5a-99b6893ae843'
 
@@ -33,6 +33,8 @@ export interface GoogleAuth {
     gsc_property: string | null
     ga4_property: string | null
     ga4_property_name: string | null
+      gbp_location: string | null
+      gbp_location_name: string | null
   }
 }
 
@@ -55,6 +57,8 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
     gsc_property: clientConn?.credentials?.gsc_property ?? null,
     ga4_property: clientConn?.credentials?.ga4_property ?? null,
     ga4_property_name: clientConn?.credentials?.ga4_property_name ?? null,
+      gbp_location: clientConn?.credentials?.gbp_location ?? null,
+      gbp_location_name: clientConn?.credentials?.gbp_location_name ?? null,
   }
 
   // Mode 1: client has their own working Google connection
@@ -132,7 +136,7 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
 /** Save per-client property selections (works in agency or client mode). */
 export async function saveGoogleSelection(
   clientId: string,
-  patch: { gsc_property?: string | null; ga4_property?: string | null; ga4_property_name?: string | null }
+  patch: { gsc_property?: string | null; ga4_property?: string | null; ga4_property_name?: string | null; gbp_location?: string | null; gbp_location_name?: string | null }
 ) {
   const supabase = adminClient()
   const { data: existing } = await supabase
@@ -171,3 +175,5 @@ export async function getAgencyGoogleStatus() {
     email: data?.credentials?.email || null,
   }
 }
+
+

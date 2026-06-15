@@ -148,6 +148,23 @@ export default function DataDetailPage({ params }: { params: Promise<{ id: strin
                 </>
               )}
 
+              {source === 'gbp' && data.summary && (
+                <>
+                  <StatCards stats={[
+                    { label: 'Search views', value: fmt(data.summary.searchViews) },
+                    { label: 'Maps views', value: fmt(data.summary.mapsViews) },
+                    { label: 'Calls', value: fmt(data.summary.calls) },
+                    { label: 'Directions', value: fmt(data.summary.directions) },
+                  ]} />
+                  <BarChart title="Profile views by day (search + maps)" data={(data.daily || []).map((d: any) => ({ date: d.date, value: d.views }))} />
+                  <SimpleTable title="Actions" rows={[
+                    { label: 'Website clicks', value: data.summary.websiteClicks },
+                    { label: 'Calls', value: data.summary.calls },
+                    { label: 'Direction requests', value: data.summary.directions },
+                  ]} />
+                </>
+              )}
+
               {source === 'callrail' && data.summary && (
                 <>
                   <StatCards stats={[
@@ -167,3 +184,4 @@ export default function DataDetailPage({ params }: { params: Promise<{ id: strin
     </div>
   )
 }
+

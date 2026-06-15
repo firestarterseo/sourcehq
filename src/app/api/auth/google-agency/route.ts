@@ -4,6 +4,7 @@ export async function GET(_: NextRequest) {
   const scopes = [
     'https://www.googleapis.com/auth/webmasters.readonly',
     'https://www.googleapis.com/auth/analytics.readonly',
+    'https://www.googleapis.com/auth/business.manage',
     'https://www.googleapis.com/auth/userinfo.email',
     'openid',
   ].join(' ')
@@ -19,4 +20,5 @@ export async function GET(_: NextRequest) {
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`)
 }
+
 

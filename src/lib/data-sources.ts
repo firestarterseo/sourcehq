@@ -26,7 +26,7 @@ export const DATA_SOURCES: DataSourceDef[] = [
   // Search & Analytics (all share the single Google OAuth connection)
   { key: 'gsc',  name: 'Search Console',   category: 'Search & Analytics', sublabel: 'Organic search demand', icon: 'Search',    status: 'live', googleBacked: true, dataRoute: 'gsc' },
   { key: 'ga4',  name: 'Analytics (GA4)',  category: 'Search & Analytics', sublabel: 'Website engagement',     icon: 'BarChart3', status: 'live', googleBacked: true, dataRoute: 'ga4' },
-  { key: 'gbp',  name: 'Business Profile',  category: 'Search & Analytics', sublabel: 'Local / maps presence',  icon: 'MapPin',    status: 'soon', googleBacked: true },
+  { key: 'gbp',  name: 'Business Profile',  category: 'Search & Analytics', sublabel: 'Local / maps presence',  icon: 'MapPin',    status: 'live', googleBacked: true, dataRoute: 'gbp' },
   { key: 'ads',  name: 'Google Ads',        category: 'Search & Analytics', sublabel: 'Paid search demand',     icon: 'Megaphone', status: 'soon', googleBacked: true },
 
   // Call & Lead Tracking
@@ -53,3 +53,4 @@ export const CATEGORY_ORDER: SourceCategory[] = [
   'Email Marketing',
   'SEO Tools',
 ]
+

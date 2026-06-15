@@ -80,6 +80,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [selGsc, setSelGsc] = useState('')
   const [selGa4, setSelGa4] = useState('')
   const [savingProps, setSavingProps] = useState(false)
+  const [gbpLocations, setGbpLocations] = useState<{ available: boolean; pending?: boolean; error?: string; locations?: { id: string; name: string }[] } | null>(null)
+  const [selGbp, setSelGbp] = useState('')
   const [showGooglePicker, setShowGooglePicker] = useState(false)
 
   const [callrail, setCallrail] = useState<CallRailData | null>(null)
@@ -118,6 +120,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
     loadCallrail()
 
+    fetch(`/api/clients/${id}/gbp-locations`).then(r => r.json()).then(d => { setGbpLocations(d); if (d.selected) setSelGbp(d.selected) }).catch(() => setGbpLocations(null))
+
     fetch(`/api/clients/${id}/callrail/companies`)
       .then(r => r.json())
       .then(data => setCrCompanies(data))
@@ -150,7 +154,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     })
     loadConnections()
     setSavingProps(false)
-    setShowGooglePicker(false)
+    const gbpName = gbpLocations?.locations?.find(l => l.id === selGbp)?.name || null; await fetch(`/api/clients/${id}/gbp-locations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName }) }); setShowGooglePicker(false)
   }
 
   async function handleConnectCallrail() {
@@ -338,7 +342,15 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Analytics (GA4) property</label>
                 <select value={selGa4} onChange={e => setSelGa4(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.ga4Properties || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
               </div>
-              <div><button onClick={handleSaveProperties} disabled={savingProps} style={{ background: savingProps ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{savingProps ? 'Saving...' : 'Save properties'}</button></div>
+              <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Business Profile location</label>
+                  {gbpLocations?.available ? (
+                    <select value={selGbp} onChange={e => setSelGbp(e.target.value)} style={selectStyle}><option value="">Select a location...</option>{(gbpLocations.locations || []).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+                  ) : (
+                    <p style={{ fontSize: '12px', color: '#92400E', margin: 0 }}>{gbpLocations?.pending ? 'Business Profile API access pending Google approval.' : (gbpLocations?.error || 'Loading locations...')}</p>
+                  )}
+                </div>
+                <div><button onClick={handleSaveProperties} disabled={savingProps} style={{ background: savingProps ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{savingProps ? 'Saving...' : 'Save properties'}</button></div>
             </div>
           )}
 
@@ -370,6 +382,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
+
+
+
+
+
 
 
 
