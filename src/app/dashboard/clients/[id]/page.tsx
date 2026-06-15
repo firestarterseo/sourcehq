@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import GenerateReportButton from '@/components/GenerateReportButton'
+import DataSourceTiles from '@/components/DataSourceTiles'
 import { Search, BarChart3, Phone, Link2 } from 'lucide-react'
 
 interface Client {
@@ -315,67 +316,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '16px', fontWeight: '600', color: '#0D1B3E', margin: 0 }}>Data sources</h3>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-            <div style={tileBase}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6D28D9' }}><Search size={17} /></span>
-                <span style={dot(googleConnected)} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>Google</div>
-                <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '1px' }}>GSC · GA4 · GBP · Ads</div>
-              </div>
-              <div style={{ marginTop: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                {googleConnected ? (
-                  <>
-                    <Link href={`/dashboard/clients/${id}/data/gsc`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>Search</Link>
-                    <Link href={`/dashboard/clients/${id}/data/ga4`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>Traffic</Link>
-                    <button onClick={() => setShowGooglePicker(!showGooglePicker)} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Manage</button>
-                  </>
-                ) : (
-                  <a href={`/api/auth/google?clientId=${id}`} style={{ background: '#6D28D9', color: '#fff', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: '500', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>Connect</a>
-                )}
-              </div>
-            </div>
-
-            <div style={tileBase}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6D28D9' }}><Phone size={17} /></span>
-                <span style={dot(crConnected)} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>CallRail</div>
-                <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{crConnected ? (callrail?.accountName || 'Connected') : 'Call tracking'}</div>
-              </div>
-              <div style={{ marginTop: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                {crConnected ? (
-                  <>
-                    <Link href={`/dashboard/clients/${id}/data/callrail`} style={{ fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: '500' }}>View data</Link>
-                    <button onClick={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }} style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 }}>Manage</button>
-                  </>
-                ) : (
-                  <button onClick={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Connect</button>
-                )}
-              </div>
-            </div>
-
-            {[{ name: 'Ahrefs', icon: <Link2 size={17} /> }, { name: 'SEMrush', icon: <BarChart3 size={17} /> }].map(s => (
-              <div key={s.name} style={{ ...tileBase, opacity: 0.7 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>{s.icon}</span>
-                  <span style={dot(false)} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '500', color: '#0D1B3E' }}>{s.name}</div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '1px' }}>Coming soon</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <DataSourceTiles
+            clientId={id}
+            googleConnected={googleConnected}
+            googleConnectHref={`/api/auth/google?clientId=${id}`}
+            status={{ connected: { gsc: googleConnected, ga4: googleConnected, callrail: crConnected }, detail: { callrail: callrail?.accountName } }}
+            onManageGoogle={() => setShowGooglePicker(!showGooglePicker)}
+            onManageCallrail={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }}
+          />
 
           {showGooglePicker && googleConnected && options?.connected && (
             <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '20px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -419,6 +367,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
 
 
 
