@@ -94,16 +94,20 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
     }
   }
 
-  // Mode 2: agency connection
-  const { data: agencyConn } = await supabase
+  // Mode 2: agency connection (account-aware, multi-account)
+  const { data: agencyRows } = await supabase
     .from('agency_connections')
-    .select('credentials, status')
+    .select('credentials, status, account_email')
     .eq('org_id', FIRESTARTER_ORG_ID)
     .eq('source_type', 'google')
-    .single()
 
-  if (agencyConn && agencyConn.status === 'connected' && agencyConn.credentials?.refresh_token) {
-    const creds = agencyConn.credentials
+  const connected = (agencyRows || []).filter((r: any) => r.status === 'connected' && r.credentials?.refresh_token)
+  if (connected.length > 0) {
+    // Pick the account this client's selection is tagged to; fall back to the first connected account
+    const wanted = selection.google_account
+    const chosen = (wanted && connected.find((r: any) => r.account_email === wanted)) || connected[0]
+    const creds: any = chosen.credentials
+
     if (Date.now() < creds.expires_at - 60000) {
       return { token: creds.access_token, mode: 'agency', selection }
     }
@@ -112,14 +116,11 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
       await supabase
         .from('agency_connections')
         .update({
-          credentials: {
-            ...creds,
-            access_token: tokens.access_token,
-            expires_at: Date.now() + tokens.expires_in * 1000,
-          },
+          credentials: { ...creds, access_token: tokens.access_token, expires_at: Date.now() + tokens.expires_in * 1000 },
         })
         .eq('org_id', FIRESTARTER_ORG_ID)
         .eq('source_type', 'google')
+        .eq('account_email', chosen.account_email)
       return { token: tokens.access_token, mode: 'agency', selection }
     }
     if (tokens.error === 'invalid_grant') {
@@ -128,6 +129,7 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
         .update({ status: 'disconnected' })
         .eq('org_id', FIRESTARTER_ORG_ID)
         .eq('source_type', 'google')
+        .eq('account_email', chosen.account_email)
       return { token: null, mode: 'none', revoked: true, selection }
     }
   }
@@ -184,4 +186,36 @@ export async function getAgencyGoogleStatus() {
 
 
 
+
+
+export async function getAllAgencyGoogleTokens(): Promise<{ email: string; token: string }[]> {
+  const supabase = adminClient()
+  const { data } = await supabase
+    .from('agency_connections')
+    .select('credentials, status, account_email')
+    .eq('org_id', FIRESTARTER_ORG_ID)
+    .eq('source_type', 'google')
+  const out: { email: string; token: string }[] = []
+  for (const row of (data || [])) {
+    if (row.status !== 'connected') continue
+    const creds: any = row.credentials
+    if (!creds?.refresh_token) continue
+    const email = row.account_email || creds.email || 'unknown'
+    if (Date.now() < creds.expires_at - 60000 && creds.access_token) {
+      out.push({ email, token: creds.access_token })
+      continue
+    }
+    const tokens = await refreshGoogleToken(creds.refresh_token)
+    if (tokens.access_token) {
+      await supabase
+        .from('agency_connections')
+        .update({ credentials: { ...creds, access_token: tokens.access_token, expires_at: Date.now() + tokens.expires_in * 1000 } })
+        .eq('org_id', FIRESTARTER_ORG_ID)
+        .eq('source_type', 'google')
+        .eq('account_email', row.account_email)
+      out.push({ email, token: tokens.access_token })
+    }
+  }
+  return out
+}
 

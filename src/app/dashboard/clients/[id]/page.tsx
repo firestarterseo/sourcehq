@@ -28,9 +28,10 @@ interface ReportRow {
 
 interface PropertyOptions {
   connected: boolean
-  gscSites?: string[]
-  ga4Properties?: { id: string; name: string }[]
-  selected?: { gsc: string | null; ga4: string | null }
+  multiAccount?: boolean
+  gscSites?: { url: string; account: string }[]
+  ga4Properties?: { id: string; name: string; account: string }[]
+  selected?: { gsc: string | null; ga4: string | null; account?: string | null }
 }
 
 interface CallRailData { connected: boolean; accountName?: string }
@@ -147,10 +148,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   async function handleSaveProperties() {
     setSavingProps(true)
-    const ga4Name = options?.ga4Properties?.find(p => p.id === selGa4)?.name || null
+    const ga4Name = options?.ga4Properties?.find((p: any) => p.id === selGa4)?.name || null
+      const gAccount = options?.ga4Properties?.find((p: any) => p.id === selGa4)?.account || options?.gscSites?.find((s: any) => s.url === selGsc)?.account || null
     await fetch(`/api/clients/${id}/google-properties`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gsc_property: selGsc || null, ga4_property: selGa4 || null, ga4_property_name: ga4Name }),
+      body: JSON.stringify({ gsc_property: selGsc || null, ga4_property: selGa4 || null, ga4_property_name: ga4Name, google_account: gAccount }),
     })
     loadConnections()
     setSavingProps(false)
@@ -336,11 +338,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '20px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Search Console property</label>
-                <select value={selGsc} onChange={e => setSelGsc(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.gscSites || []).map(s => <option key={s} value={s}>{s}</option>)}</select>
+                <select value={selGsc} onChange={e => setSelGsc(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.gscSites || []).map((s: any) => <option key={s.url} value={s.url}>{s.url}{options.multiAccount ? ' (' + s.account + ')' : ''}</option>)}</select>
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Analytics (GA4) property</label>
-                <select value={selGa4} onChange={e => setSelGa4(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.ga4Properties || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                <select value={selGa4} onChange={e => setSelGa4(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.ga4Properties || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}{options.multiAccount ? ' (' + p.account + ')' : ''}</option>)}</select>
               </div>
               <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Business Profile location</label>
@@ -382,6 +384,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
+
+
+
 
 
 
