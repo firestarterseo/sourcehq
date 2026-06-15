@@ -6,7 +6,7 @@ import { Suspense } from 'react'
 import Sidebar from '@/components/Sidebar'
 
 interface AgencyStatus {
-  google?: { connected?: boolean; email?: string | null }
+  google?: { connected?: boolean; email?: string | null; accounts?: { email: string }[] }
   callrail?: { configured?: boolean; accountName?: string }
   error?: string
 }
@@ -69,6 +69,7 @@ function ConnectionsContent() {
 
   const googleConnected = !!status?.google?.connected
   const googleEmail = status?.google?.email || null
+  const googleAccounts = status?.google?.accounts || []
   const callrailConfigured = !!status?.callrail?.configured
   const callrailName = status?.callrail?.accountName || null
 
@@ -105,10 +106,10 @@ function ConnectionsContent() {
             name="Google (GSC, GA4, GBP, Ads)"
             description="Connect Firestarter's Google account â€” covers every client property it can access"
             connected={googleConnected}
-            detail={googleEmail ? `Connected as ${googleEmail}` : null}
+            detail={googleAccounts.length ? 'Connected as ' + googleAccounts.map((a: any) => a.email).join(', ') : (googleEmail ? 'Connected as ' + googleEmail : null)}
             action={
               <a href="/api/auth/google-agency" style={{ background: googleConnected ? 'transparent' : '#6D28D9', color: googleConnected ? '#6D28D9' : '#fff', border: googleConnected ? '0.5px solid #6D28D9' : 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '500', textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
-                {googleConnected ? 'Reconnect' : 'Connect Google'}
+                {googleConnected ? 'Add another account' : 'Connect Google'}
               </a>
             }
           />
@@ -143,4 +144,8 @@ export default function ConnectionsPage() {
     </div>
   )
 }
+
+
+
+
 
