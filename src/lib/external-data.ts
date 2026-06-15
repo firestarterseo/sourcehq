@@ -49,7 +49,7 @@ export async function getEconomicData(days: number, fredUnemployment: string | n
   }
 }
 
-export async function getWeatherData(days: number, lat = 39.7392, lon = -104.9903, timezone = 'America/Denver') {
+export async function getWeatherData(days: number, lat = 39.7392, lon = -104.9903, timezone = 'America/Denver', label = 'Denver metro') {
   try {
     const cappedDays = Math.min(days, 730)
     const start = isoDaysAgo(cappedDays)
@@ -126,6 +126,7 @@ export function getCalendarContext(days: number) {
     upcoming_events: upcoming,
   }
 }
+
 
 
 
