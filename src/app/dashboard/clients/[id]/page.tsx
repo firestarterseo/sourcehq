@@ -14,6 +14,7 @@ interface Client {
   name: string
   industry: string
   website: string
+  region?: string
   active: boolean
   created_at: string
 }
@@ -369,6 +370,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
 
 
 
