@@ -8,6 +8,7 @@ const SOURCE_META: Record<string, { title: string; endpoint: string }> = {
   gsc: { title: 'Search Console', endpoint: 'gsc' },
   ga4: { title: 'Traffic (GA4)', endpoint: 'ga4' },
   callrail: { title: 'Calls (CallRail)', endpoint: 'callrail' },
+  gbp: { title: 'Business Profile', endpoint: 'gbp' },
 }
 
 const WINDOWS = [
@@ -36,14 +37,25 @@ function StatCards({ stats }: { stats: { label: string; value: string }[] }) {
 
 function BarChart({ title, data }: { title: string; data: { date: string; value: number }[] }) {
   if (!data || data.length === 0) return null
-  const max = Math.max(...data.map(d => d.value), 1)
+  const MAX_BARS = 90
+  let bars = data
+  if (data.length > MAX_BARS) {
+    const size = Math.ceil(data.length / MAX_BARS)
+    const out: { date: string; value: number }[] = []
+    for (let i = 0; i < data.length; i += size) {
+      const slice = data.slice(i, i + size)
+      out.push({ date: slice[0].date, value: slice.reduce((s, d) => s + d.value, 0) })
+    }
+    bars = out
+  }
+  const max = Math.max(...bars.map(d => d.value), 1)
   const fmtD = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   return (
     <div style={{ marginBottom: '24px' }}>
       <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#0D1B3E', marginBottom: '10px' }}>{title}</h3>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '120px', padding: '12px', background: '#FAFAF8', borderRadius: '10px', border: '0.5px solid #F3F4F6' }}>
-        {data.map((d, i) => (
-          <div key={i} title={`${fmtD(d.date)}: ${fmt(d.value)}`} style={{ flex: 1, height: `${Math.max((d.value / max) * 100, 2)}%`, background: '#6D28D9', borderRadius: '2px 2px 0 0', minWidth: '1px', opacity: 0.85 }} />
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '120px', padding: '12px', background: '#FAFAF8', borderRadius: '10px', border: '0.5px solid #F3F4F6', overflow: 'hidden' }}>
+        {bars.map((d, i) => (
+          <div key={i} title={`${fmtD(d.date)}: ${fmt(d.value)}`} style={{ flex: 1, height: `${Math.max((d.value / max) * 100, 2)}%`, background: '#6D28D9', borderRadius: '2px 2px 0 0', minWidth: 0, opacity: 0.85 }} />
         ))}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', padding: '0 12px' }}>
@@ -186,7 +198,3 @@ export default function DataDetailPage({ params }: { params: Promise<{ id: strin
     </div>
   )
 }
-
-
-
-
