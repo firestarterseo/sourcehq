@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import GenerateReportButton from '@/components/GenerateReportButton'
 
-const STEP_LABELS = ['Connect Google', 'Connect data', 'Call tracking', 'Generate']
+const STEP_LABELS = ['Client details', 'Connect Google', 'Connect data', 'Call tracking', 'Generate']
 
 const selectStyle = {
   width: '100%', padding: '10px 12px', border: '0.5px solid #E5E5E3', borderRadius: '8px',
@@ -27,12 +27,15 @@ const skipBtn = {
 }
 
 function StepDots({ step, googleDone, dataDone, callrailDone, reportDone }: { step: number; googleDone: boolean; dataDone: boolean; callrailDone: boolean; reportDone: boolean }) {
-  const done = [googleDone, dataDone, callrailDone, reportDone]
+  // "Client details" is always done by the time the wizard renders (the client exists).
+  // The wizard's internal step (0-3) maps to visual index step+1.
+  const done = [true, googleDone, dataDone, callrailDone, reportDone]
+  const currentVisual = step + 1
   return (
     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '32px' }}>
       {STEP_LABELS.map((label, i) => {
         const isDone = done[i]
-        const isCurrent = i === step
+        const isCurrent = i === currentVisual
         const bg = isDone ? '#10B981' : isCurrent ? '#6D28D9' : '#E5E7EB'
         const color = isDone || isCurrent ? '#fff' : '#9CA3AF'
         return (
