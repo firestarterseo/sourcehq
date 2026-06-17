@@ -44,7 +44,7 @@ export default function NewClientPage() {
         setLoading(false)
         return
       }
-      router.push('/dashboard/clients/' + data.client.id)
+      router.push('/dashboard/clients/' + data.client.id + '/setup')
       router.refresh()
     } catch (e: any) {
       setError('Unexpected error: ' + e.message)

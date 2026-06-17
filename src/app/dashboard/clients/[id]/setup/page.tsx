@@ -38,7 +38,7 @@ function StepDots({ step, googleDone, dataDone, callrailDone, reportDone }: { st
         return (
           <div key={label} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_LABELS.length - 1 ? 1 : '0 0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: bg, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>{isDone ? '\u2713' : i + 1}</div>
+              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: bg, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>{isDone ? '✓' : i + 1}</div>
               <span style={{ fontSize: '12px', fontWeight: 500, color: isCurrent ? '#0D1B3E' : '#9CA3AF', whiteSpace: 'nowrap' }}>{label}</span>
             </div>
             {i < STEP_LABELS.length - 1 && <div style={{ flex: 1, height: '1px', background: '#E5E7EB', margin: '0 12px' }} />}
@@ -171,7 +171,7 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
 
               <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '16px', padding: '32px' }}>
                 {step === 0 && (
-                  <StepShell title="Connect Google" subtitle="Connect the Google account that has this client's Search Console and Analytics access. This is the one required step \u2014 everything else can be added later.">
+                  <StepShell title="Connect Google" subtitle="Connect the Google account that has this client's Search Console and Analytics access. This is the one required step — everything else can be added later.">
                     {googleConnected ? (
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
@@ -187,7 +187,7 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
                 )}
 
                 {step === 1 && (
-                  <StepShell title="Connect your data" subtitle="Pick the Search Console and/or Analytics property for this client. You need at least one \u2014 both is better.">
+                  <StepShell title="Connect your data" subtitle="Pick the Search Console and/or Analytics property for this client. You need at least one — both is better.">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '28px' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Search Console property</label>
@@ -230,13 +230,13 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
                           crCompanies?.available ? (
                             <div style={{ marginBottom: '24px' }}>
                               <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>CallRail company</label>
-                              <select value={crCompanyId} onChange={e => setCrCompanyId(e.target.value)} style={selectStyle}><option value="">Select a company...</option>{(crCompanies.companies || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}{(crCompanies.accounts || []).length > 1 ? ` \u2014 ${c.accountName}` : ''}</option>)}</select>
+                              <select value={crCompanyId} onChange={e => setCrCompanyId(e.target.value)} style={selectStyle}><option value="">Select a company...</option>{(crCompanies.companies || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}{(crCompanies.accounts || []).length > 1 ? ` — ${c.accountName}` : ''}</option>)}</select>
                             </div>
                           ) : <p style={{ fontSize: '12px', color: '#92400E', marginBottom: '24px' }}>{crCompanies?.error || 'Loading companies...'}</p>
                         ) : (
                           <div style={{ marginBottom: '24px' }}>
                             <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Client&apos;s CallRail API key</label>
-                            <input type="password" value={callrailKey} onChange={e => setCallrailKey(e.target.value)} placeholder="From their CallRail Settings \u2192 Integrations" style={inputStyle} />
+                            <input type="password" value={callrailKey} onChange={e => setCallrailKey(e.target.value)} placeholder="From their CallRail Settings → Integrations" style={inputStyle} />
                           </div>
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -250,14 +250,14 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
                 )}
 
                 {step === 3 && (
-                  <StepShell title="Generate your first report" subtitle="Everything's connected. Generate the first publication \u2014 it usually takes 30\u201390 seconds, and you'll land on the finished report when it's done.">
+                  <StepShell title="Generate your first report" subtitle="Everything's connected. Generate the first publication — it usually takes 30–90 seconds, and you'll land on the finished report when it's done.">
                     {hasReport && (
                       <div style={{ background: '#ECFDF5', border: '0.5px solid #A7F3D0', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#065F46', marginBottom: '20px' }}>This client already has at least one report. You can generate another, or head to the client page.</div>
                     )}
                     <GenerateReportButton clientId={id} />
                     <div style={{ marginTop: '28px', display: 'flex', gap: '12px' }}>
                       <button onClick={() => setStep(2)} style={ghostBtn}>Back</button>
-                      <Link href={`/dashboard/clients/${id}`} style={{ ...skipBtn, display: 'inline-flex', alignItems: 'center' }}>Finish \u2014 go to client page</Link>
+                      <Link href={`/dashboard/clients/${id}`} style={{ ...skipBtn, display: 'inline-flex', alignItems: 'center' }}>Finish — go to client page</Link>
                     </div>
                   </StepShell>
                 )}
