@@ -24,14 +24,15 @@ async function fredSeries(seriesId: string, days: number) {
 }
 
 export async function getEconomicData(days: number, fredUnemployment: string | null = 'DENV708URN') {
-  const [denverUnemployment, consumerSentiment, mortgage30, fedFunds] = await Promise.all([
+  const [denverUnemployment, consumerSentiment, mortgage30, fedFunds, sp500] = await Promise.all([
     fredSeries(fredUnemployment || 'UNRATE', days),   // metro unemployment, or national fallback
     fredSeries('UMCSENT', days),      // University of Michigan consumer sentiment
     fredSeries('MORTGAGE30US', days), // 30-year fixed mortgage average
     fredSeries('FEDFUNDS', days),     // Federal funds effective rate
+    fredSeries('SP500', days),        // S&P 500 daily close (price index, no dividends)
   ])
 
-  if (!denverUnemployment && !consumerSentiment && !mortgage30 && !fedFunds) return null
+  if (!denverUnemployment && !consumerSentiment && !mortgage30 && !fedFunds && !sp500) return null
 
   // Thin weekly series to monthly-ish to keep the prompt compact
   const thin = (arr: any[] | null) => {
@@ -46,6 +47,7 @@ export async function getEconomicData(days: number, fredUnemployment: string | n
     us_consumer_sentiment_index: thin(consumerSentiment),
     us_30yr_mortgage_rate_pct: thin(mortgage30),
     fed_funds_rate_pct: thin(fedFunds),
+    sp500_index_close: thin(sp500),
   }
 }
 
@@ -126,6 +128,7 @@ export function getCalendarContext(days: number) {
     upcoming_events: upcoming,
   }
 }
+
 
 
 
