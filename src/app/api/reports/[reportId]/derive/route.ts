@@ -115,3 +115,4 @@ Rules:
 
   return NextResponse.json({ format, text })
 }
+
