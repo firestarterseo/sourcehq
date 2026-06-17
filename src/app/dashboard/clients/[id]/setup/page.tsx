@@ -27,8 +27,6 @@ const skipBtn = {
 }
 
 function StepDots({ step, googleDone, dataDone, callrailDone, reportDone }: { step: number; googleDone: boolean; dataDone: boolean; callrailDone: boolean; reportDone: boolean }) {
-  // "Client details" is always done by the time the wizard renders (the client exists).
-  // The wizard's internal step (0-3) maps to visual index step+1.
   const done = [true, googleDone, dataDone, callrailDone, reportDone]
   const currentVisual = step + 1
   return (
@@ -75,6 +73,8 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
   const [multiAccount, setMultiAccount] = useState(false)
   const [selGsc, setSelGsc] = useState('')
   const [selGa4, setSelGa4] = useState('')
+  const [gbpLocations, setGbpLocations] = useState<{ available: boolean; pending?: boolean; error?: string; locations?: { id: string; name: string }[]; selected?: string } | null>(null)
+  const [selGbp, setSelGbp] = useState('')
   const [savingProps, setSavingProps] = useState(false)
 
   const [callrailConnected, setCallrailConnected] = useState(false)
@@ -97,7 +97,8 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
       fetch(`/api/clients/${id}/callrail`).then(r => r.json()).catch(() => null),
       fetch(`/api/clients/${id}/callrail/companies`).then(r => r.json()).catch(() => null),
       fetch(`/api/clients/${id}/report`).then(r => r.json()).catch(() => null),
-    ]).then(([client, gp, cr, crc, rep]) => {
+      fetch(`/api/clients/${id}/gbp-locations`).then(r => r.json()).catch(() => null),
+    ]).then(([client, gp, cr, crc, rep, gbp]) => {
       if (client?.client) setClientName(client.client.name)
       const gConn = !!gp?.connected
       setGoogleConnected(gConn)
@@ -108,6 +109,8 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
       const ga4 = gp?.selected?.ga4 || ''
       setSelGsc(gsc)
       setSelGa4(ga4)
+      setGbpLocations(gbp)
+      if (gbp?.selected) setSelGbp(gbp.selected)
       setCallrailConnected(!!cr?.connected)
       setCrCompanies(crc)
       const reports = rep?.reports || []
@@ -132,6 +135,11 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
     await fetch(`/api/clients/${id}/google-properties`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gsc_property: selGsc || null, ga4_property: selGa4 || null, ga4_property_name: ga4Name, google_account: gAccount }),
+    })
+    const gbpName = gbpLocations?.locations?.find(l => l.id === selGbp)?.name || null
+    await fetch(`/api/clients/${id}/gbp-locations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName }),
     })
     setSavingProps(false)
     setStep(2)
@@ -190,7 +198,7 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
                 )}
 
                 {step === 1 && (
-                  <StepShell title="Connect your data" subtitle="Pick the Search Console and/or Analytics property for this client. You need at least one — both is better.">
+                  <StepShell title="Connect your data" subtitle="Pick the Search Console and/or Analytics property for this client. You need at least one — both is better. Business Profile is optional.">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '28px' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Search Console property</label>
@@ -199,6 +207,14 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
                       <div>
                         <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Analytics (GA4) property</label>
                         <select value={selGa4} onChange={e => setSelGa4(e.target.value)} style={selectStyle}><option value="">None</option>{ga4Properties.map(p => <option key={p.id} value={p.id}>{p.name}{multiAccount ? ' (' + p.account + ')' : ''}</option>)}</select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Business Profile location <span style={{ color: '#9CA3AF', fontWeight: 400 }}>(optional)</span></label>
+                        {gbpLocations?.available ? (
+                          <select value={selGbp} onChange={e => setSelGbp(e.target.value)} style={selectStyle}><option value="">None</option>{(gbpLocations.locations || []).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+                        ) : (
+                          <p style={{ fontSize: '12px', color: '#92400E', margin: '4px 0 0' }}>{gbpLocations?.pending ? 'Business Profile API access pending Google approval — you can add this later.' : (gbpLocations?.error || 'Loading locations...')}</p>
+                        )}
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -253,7 +269,7 @@ export default function SetupWizard({ params }: { params: Promise<{ id: string }
                 )}
 
                 {step === 3 && (
-                  <StepShell title="Generate your first report" subtitle="Everything's connected. Generate the first publication — it usually takes 30–90 seconds, and you'll land on the finished report when it's done.">
+                  <StepShell title="Generate your first report" subtitle="Everything's connected. Generate the first publication — it usually takes 30–90 seconds, and you'll land on the finished report when it's done. More data sources can be added anytime from the client page.">
                     {hasReport && (
                       <div style={{ background: '#ECFDF5', border: '0.5px solid #A7F3D0', borderRadius: '8px', padding: '12px 16px', fontSize: '13px', color: '#065F46', marginBottom: '20px' }}>This client already has at least one report. You can generate another, or head to the client page.</div>
                     )}
