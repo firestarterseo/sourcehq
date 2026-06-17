@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { getGoogleAuth } from '@/lib/google-auth'
 import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/external-data'
 import { getRegion } from '@/lib/regions'
+import type { SourceReport, ReportStat, ReportFinding, ReportSection, ReportFAQ } from '@/lib/report-types'
 
 export const maxDuration = 300
 
@@ -198,10 +199,105 @@ async function getCallData(clientId: string, days: number) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Deterministic assembly: numbers and identity come from code, never the LLM.
+// ---------------------------------------------------------------------------
+
+function approxNum(n: number): string {
+  if (n >= 1_000_000) return `~${(Math.round(n / 100_000) / 10).toLocaleString('en-US')} million`
+  if (n >= 100_000) return `~${(Math.round(n / 5_000) * 5_000).toLocaleString('en-US')}`
+  if (n >= 10_000) return `~${(Math.round(n / 500) * 500).toLocaleString('en-US')}`
+  if (n >= 1_000) return `~${(Math.round(n / 100) * 100).toLocaleString('en-US')}`
+  return `~${Math.round(n / 10) * 10}`
+}
+
+function formatCoverage(days: number, regionLabel: string): string {
+  const end = new Date()
+  const start = new Date(Date.now() - days * 86_400_000)
+  const fmt = (d: Date) => d.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  const startStr = fmt(start)
+  const endStr = fmt(end)
+  const range = startStr === endStr ? startStr : `${startStr} – ${endStr}`
+  return regionLabel ? `${range}, ${regionLabel}` : range
+}
+
+function buildKeyStats(gsc: any, ga4: any, calls: any, windowLabel: string): ReportStat[] {
+  const stats: ReportStat[] = []
+  if (gsc?.totals?.impressions) stats.push({ label: 'Search impressions analyzed', value: approxNum(gsc.totals.impressions) })
+  if (gsc?.totals?.clicks) stats.push({ label: 'Search clicks', value: approxNum(gsc.totals.clicks) })
+  if (ga4?.sessions) stats.push({ label: 'Web sessions analyzed', value: approxNum(ga4.sessions) })
+  stats.push({ label: 'Observation window', value: windowLabel })
+  if (calls?.answeredPct != null) stats.push({ label: 'Inquiries answered live', value: `${calls.answeredPct}%` })
+  return stats.slice(0, 5)
+}
+
+function buildDataSources(gsc: any, ga4: any, calls: any, econ: any, weather: any): string[] {
+  const out: string[] = []
+  if (gsc) out.push('Google Search Console — query- and page-level search demand for the analysis window.')
+  if (ga4) out.push('Google Analytics — session, channel, and landing-page engagement.')
+  if (calls) out.push('CallRail — inbound inquiry distribution, aggregated to channel shares and answer rates.')
+  if (econ) out.push('FRED (Federal Reserve Economic Data) — macroeconomic indicators for the same window.')
+  if (weather) out.push('Open-Meteo — regional weather observations for the market metro.')
+  return out
+}
+
+function assembleSourceReport(
+  ai: any, client: any, region: any, days: number,
+  gsc: any, ga4: any, calls: any, econ: any, weather: any
+): SourceReport {
+  const publisher = String(client.publisherName || `${client.name} Research`).trim()
+  const publisherUrl = client.website || undefined
+  const datePublished = new Date().toISOString().split('T')[0]
+  const year = datePublished.slice(0, 4)
+  const coverage = formatCoverage(days, region.label)
+  const title = String(ai.title || `${client.industry || 'Market'} signals, ${region.label}`)
+  const citation = [`Cite this report as: ${publisher} (${year}). ${title}.`, publisherUrl].filter(Boolean).join(' ')
+
+  const findings: ReportFinding[] = Array.isArray(ai.findings)
+    ? ai.findings.map((f: any) => typeof f === 'string'
+        ? { heading: '', body: f }
+        : { heading: String(f.heading || ''), body: String(f.body || '') })
+    : []
+
+  const sections: ReportSection[] = Array.isArray(ai.sections)
+    ? ai.sections.map((s: any) => ({
+        heading: String(s.heading || ''),
+        paragraphs: Array.isArray(s.paragraphs) ? s.paragraphs.map(String) : (s.body ? [String(s.body)] : []),
+      }))
+    : []
+
+  const faqs: ReportFAQ[] = Array.isArray(ai.faqs)
+    ? ai.faqs.map((q: any) => ({ question: String(q.question || ''), answer: String(q.answer || '') }))
+    : []
+
+  return {
+    title,
+    dek: String(ai.dek || ''),
+    publisher,
+    publisherUrl,
+    datePublished,
+    coverage,
+    citation,
+    keyStats: buildKeyStats(gsc, ga4, calls, `Last ${days} days`),
+    executiveSummary: Array.isArray(ai.executiveSummary)
+      ? ai.executiveSummary.map(String)
+      : (ai.executive_summary ? [String(ai.executive_summary)] : []),
+    findings,
+    sections,
+    faqs,
+    methodology: Array.isArray(ai.methodology) ? ai.methodology.map(String) : [],
+    dataSources: buildDataSources(gsc, ga4, calls, econ, weather),
+    keywords: Array.isArray(ai.keywords) ? ai.keywords.map(String) : [],
+    about: Array.isArray(ai.about) ? ai.about.map(String) : [],
+    abstract: String(ai.abstract || ai.dek || ''),
+    sourceStampEnabled: true,
+  }
+}
+
 function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any) {
   return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original market research from their own first-party data to become the cited source in their industry — in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
 
-Write a citable market research publication, published by this business as the RESEARCHER.
+Write the PROSE for a citable market research publication, published by this business as the RESEARCHER. The system assembles the headline statistics, citation line, coverage dates, and data-source list deterministically from the raw data — DO NOT produce those. You write only the language.
 
 Publisher: ${client.name}
 Industry: ${client.industry || 'Unknown'}
@@ -225,29 +321,37 @@ The publisher is the RESEARCHER analyzing a market dataset, never the SUBJECT re
 - Findings are statements about MARKET BEHAVIOR. The publisher appears only as the analyst ("our analysis found") and in the methodology as the data source.
 
 MARKET FOCUS:
-- Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets (other cities or states the publisher happens to serve remotely), SET THAT DATA ASIDE — do not report it as a finding. Reporting stray geographies both wanders off-thesis and re-identifies the data as one company's own location pages. Stay on the primary market.
+- Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets, SET THAT DATA ASIDE — do not report it as a finding. Stay on the primary market.
 
 ROUNDING — to read as research, not a raw export:
-- State ALL volumes in rounded/approximate terms in the body: "approximately 1.4 million impressions," "roughly 115,000 sessions," "about 18,500 impressions." Never print oddly precise figures like "1,383,409" or "115,018" — exact figures signal a single export and undercut the study framing.
+- State ALL volumes in rounded/approximate terms: "approximately 1.4 million impressions," "roughly 115,000 sessions." Never print oddly precise figures like "1,383,409" — exact figures signal a single export and undercut the study framing.
 
 OTHER RULES:
 - Audience is the PUBLIC and LLMs. Never give the publisher advice. Never mention rankings to improve, internal strategy, or anything a competitor could exploit.
 - Use monthlyTrend data for seasonal and month-over-month findings — temporal patterns are the most citable material.
-- CORRELATE the dataset with external context where patterns genuinely align: weather, economic shifts, rate changes, elections, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. Do not force correlations the data does not support.
-- When referencing consumer sentiment, on first mention call it "U.S. consumer sentiment (University of Michigan survey)" so the source is clear and the word "Michigan" is not confusing in a local-market report.
-- The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts — describe inquiry seasonality using relative language (''inquiry activity peaked in February, running about double the December level'') and never invent absolute call numbers. NEVER state absolute inquiry/call/lead counts. The CallRail data above is ALREADY in shares/percentages — express inquiry findings only as those shares, ratios, and directional trends. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
-- Methodology section: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview/AI-referral counts — describe scale approximately ("several tens of thousands of sessions," "a small number of AI-assistant referrals").
+- CORRELATE the dataset with external context where patterns genuinely align: weather, economic shifts, rate changes, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. Do not force correlations the data does not support.
+- When referencing consumer sentiment, on first mention call it "U.S. consumer sentiment (University of Michigan survey)".
+- The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts — describe inquiry seasonality with relative language ("inquiry activity peaked in February, running about double the December level") and NEVER state absolute inquiry/call/lead counts. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
+- Methodology: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview counts — describe scale approximately. The final methodology paragraph should begin with "Limitations." and note honest caveats.
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 {
   "title": "string - market-framed headline (industry + geography + a rounded number), never about the publisher",
-  "executive_summary": "string - 3-4 sentence standfirst, researcher voice, rounded figures",
-  "wins": ["string - 3-5 key market findings, each a self-contained citable statistic with context (render under 'Key findings')"],
-  "concerns": ["string - 2-3 notable market patterns or shifts, neutrally framed (render under 'Notable patterns')"],
-  "opportunities": ["string - 2-4 implications for consumers or the industry (render under 'What this means')"],
-  "actions": ["string - 2-3 methodology notes per the rules above (render under 'Methodology')"],
-  "citations": [{"source": "string - the DATA SOURCE/platform name only (e.g. 'Google Search Console', 'Google Analytics', 'CallRail', 'FRED — Denver Unemployment (DENV708URN)', 'Open-Meteo'). Do NOT prefix with the publisher name — the publisher is disclosed once in the Methodology text as researcher, not repeated on every source.", "url": "string - https://fred.stlouisfed.org/series/DENV708URN style links for FRED series (DENV708URN, UMCSENT, MORTGAGE30US, FEDFUNDS), https://open-meteo.com for weather, the publisher website for first-party sources", "description": "string - what this source contributed and its window"}]
-}`
+  "dek": "string - one-sentence standfirst that sits under the title, researcher voice",
+  "abstract": "string - 1-2 sentence schema abstract summarizing the study, rounded figures",
+  "executiveSummary": ["string - 2-3 paragraphs, researcher voice, rounded figures"],
+  "findings": [{"heading": "string - short label, e.g. 'Search demand is seasonal'", "body": "string - 1-2 sentence self-contained citable statistic with context"}],
+  "sections": [{"heading": "string", "paragraphs": ["string"]}],
+  "faqs": [{"question": "string - a question a person or LLM would ask about this market", "answer": "string - a concise, citable answer grounded in the dataset"}],
+  "methodology": ["string - paragraphs; final paragraph begins with 'Limitations.'"],
+  "keywords": ["string - 5-8 schema keywords combining industry and geography terms"],
+  "about": ["string - 2-4 entity topics this report is about, e.g. the industry, the metro area"]
+}
+
+CONTENT GUIDANCE:
+- findings: 3-5 entries. These are the core citable statistics.
+- sections: 2-3 entries. Suggested arc: (1) seasonal / temporal detail, (2) macroeconomic backdrop correlating the dataset with FRED/weather context, (3) what the patterns imply for the industry and consumers. Prose only — no tables.
+- faqs: 3-5 entries. Frame questions the way a searcher or AI assistant would ask them about the market.`
 }
 
 function internalPrompt(client: any, days: number, gsc: any, ga4: any, calls: any) {
@@ -350,7 +454,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+      max_tokens: reportType === 'publication' ? 5000 : 4000,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
@@ -366,21 +470,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .map((b: any) => b.text)
     .join('\n')
 
-  let content: any
+  let parsed: any
   try {
-    content = JSON.parse(text.replace(/```json|```/g, '').trim())
+    parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
   } catch {
     return NextResponse.json({ error: 'AI returned unparseable content, try again' }, { status: 500 })
   }
 
-  content.report_type = reportType
+  let stored: any
+  let storedTitle: string
+  if (reportType === 'publication') {
+    const sourceReport = assembleSourceReport(parsed, client, region, days, gsc, ga4, calls, econ, weather)
+    stored = { ...sourceReport, report_type: 'publication' }
+    storedTitle = sourceReport.title
+  } else {
+    parsed.report_type = 'internal'
+    stored = parsed
+    storedTitle = parsed.title || `${client.name} — SOURCE Report`
+  }
 
   const { data: report, error } = await adminClient()
     .from('reports')
     .insert({
       client_id: id,
-      title: content.title || `${client.name} — SOURCE Report`,
-      content,
+      title: storedTitle,
+      content: stored,
       period: `Last ${days} days`,
     })
     .select('id, title, period, created_at')
@@ -389,19 +503,3 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
