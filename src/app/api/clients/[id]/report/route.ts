@@ -177,7 +177,8 @@ async function getCallData(clientId: string, days: number) {
     if (c.answered) answered++
     if (c.first_call) firstTime++
   }
-  const total = calls.length || 1
+  if (calls.length === 0) return null
+  const total = calls.length
   return {
     daysCovered: days,
     sampleSize: calls.length < 50 ? 'small' : calls.length < 200 ? 'modest' : 'substantial',
@@ -503,3 +504,4 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
