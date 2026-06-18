@@ -5,6 +5,8 @@ import { cookies } from 'next/headers'
 import { getGoogleAuth } from '@/lib/google-auth'
 import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/external-data'
 import { getRegion } from '@/lib/regions'
+import { analyzeMacro } from '@/lib/macro-analysis'
+import type { MacroAnalysis } from '@/lib/macro-analysis'
 import type { SourceReport, ReportStat, ReportFinding, ReportSection, ReportFAQ } from '@/lib/report-types'
 
 export const maxDuration = 300
@@ -218,7 +220,7 @@ function formatCoverage(days: number, regionLabel: string): string {
   const fmt = (d: Date) => d.toLocaleString('en-US', { month: 'long', year: 'numeric' })
   const startStr = fmt(start)
   const endStr = fmt(end)
-  const range = startStr === endStr ? startStr : `${startStr} – ${endStr}`
+  const range = startStr === endStr ? startStr : `${startStr} - ${endStr}`
   return regionLabel ? `${range}, ${regionLabel}` : range
 }
 
@@ -234,17 +236,17 @@ function buildKeyStats(gsc: any, ga4: any, calls: any, windowLabel: string): Rep
 
 function buildDataSources(gsc: any, ga4: any, calls: any, econ: any, weather: any): string[] {
   const out: string[] = []
-  if (gsc) out.push('Google Search Console — query- and page-level search demand for the analysis window.')
-  if (ga4) out.push('Google Analytics — session, channel, and landing-page engagement.')
-  if (calls) out.push('CallRail — inbound inquiry distribution, aggregated to channel shares and answer rates.')
-  if (econ) out.push('FRED (Federal Reserve Economic Data) — macroeconomic indicators for the same window.')
-  if (weather) out.push('Open-Meteo — regional weather observations for the market metro.')
+  if (gsc) out.push('Google Search Console - query- and page-level search demand for the analysis window.')
+  if (ga4) out.push('Google Analytics - session, channel, and landing-page engagement.')
+  if (calls) out.push('CallRail - inbound inquiry distribution, aggregated to channel shares and answer rates.')
+  if (econ) out.push('FRED (Federal Reserve Economic Data) - macroeconomic indicators for the same window.')
+  if (weather) out.push('Open-Meteo - regional weather observations for the market metro.')
   return out
 }
 
 function assembleSourceReport(
   ai: any, client: any, region: any, days: number,
-  gsc: any, ga4: any, calls: any, econ: any, weather: any
+  gsc: any, ga4: any, calls: any, econ: any, weather: any, macro: MacroAnalysis
 ): SourceReport {
   const publisher = String(client.publisherName || `${client.name} Research`).trim()
   const publisherUrl = client.website || undefined
@@ -288,6 +290,7 @@ function assembleSourceReport(
     faqs,
     methodology: Array.isArray(ai.methodology) ? ai.methodology.map(String) : [],
     dataSources: buildDataSources(gsc, ga4, calls, econ, weather),
+    macro,
     keywords: Array.isArray(ai.keywords) ? ai.keywords.map(String) : [],
     about: Array.isArray(ai.about) ? ai.about.map(String) : [],
     abstract: String(ai.abstract || ai.dek || ''),
@@ -295,10 +298,39 @@ function assembleSourceReport(
   }
 }
 
-function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any) {
-  return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original market research from their own first-party data to become the cited source in their industry — in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
+function macroComputedBlock(macro: MacroAnalysis): string {
+  if (!macro || macro.demandSource === 'none') {
+    return 'COMPUTED MACRO ANALYSIS: no demand anchor available (neither search impressions nor sessions had enough monthly data), so do NOT assert any correlation between demand and economic indicators. Report economic figures as standalone context only.'
+  }
+  const demandLabel = macro.demandSource === 'gsc_impressions' ? 'search demand (search impressions)' : 'web sessions'
+  const dc = macro.demandChange
+  const demandLine = dc ? `Over the window, ${demandLabel} moved ${dc.changePct >= 0 ? '+' : ''}${dc.changePct}% (${dc.direction}).` : ''
+  const changeLines = macro.seriesChanges
+    .map(s => `- ${s.series}: ${s.changePct >= 0 ? '+' : ''}${s.changePct}% over the window (${s.direction}).`)
+    .join('\n')
+  const coLines = macro.coMovements
+    .map(c => `- ${c.note}`)
+    .join('\n')
+  return `COMPUTED MACRO ANALYSIS (these numbers were calculated deterministically from the data - USE THESE, do not invent your own correlations):
+Demand anchor: ${demandLabel}. ${demandLine}
 
-Write the PROSE for a citable market research publication, published by this business as the RESEARCHER. The system assembles the headline statistics, citation line, coverage dates, and data-source list deterministically from the raw data — DO NOT produce those. You write only the language.
+Window change for each indicator:
+${changeLines}
+
+Directional relationship to demand (computed):
+${coLines}
+
+HOW TO USE THIS:
+- When you discuss the macro backdrop, describe the COMPUTED relationships above using the real percentages. Example: "search demand rose ~14% over the window while consumer sentiment fell ~6%, a divergence" — using the actual computed numbers.
+- You may use correlation language ("moved in step with", "moved inversely to", "diverged from") ONLY for the computed co-movements above. Always hedge causation ("coinciding with", not "caused by").
+- For any economic indicator WITHOUT a computed co-movement, or if the relationship is "unrelated", report its window change as standalone CONTEXT only - state the figure, do not tie it to demand.
+- Keep the LOCAL findings (search/sessions/inquiry seasonality, weather) as the lead. The national economic indicators are supporting context, not the headline.`
+}
+
+function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any, macro: MacroAnalysis) {
+  return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original market research from their own first-party data to become the cited source in their industry - in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
+
+Write the PROSE for a citable market research publication, published by this business as the RESEARCHER. The system assembles the headline statistics, citation line, coverage dates, and data-source list deterministically from the raw data - DO NOT produce those. You write only the language.
 
 Publisher: ${client.name}
 Industry: ${client.industry || 'Unknown'}
@@ -316,24 +348,26 @@ Economic indicators (FRED): ${JSON.stringify(econ) || 'unavailable'}
 Weather, market metro (Open-Meteo): ${JSON.stringify(weather) || 'unavailable'}
 Calendar context: ${JSON.stringify(calendar) || 'unavailable'}
 
-FRAMING — the single most important rule:
-The publisher is the RESEARCHER analyzing a market dataset, never the SUBJECT reporting its own performance. The data is "a dataset of N search impressions related to [industry] services in [geography]" — never "our impressions," "our web properties," or "[publisher] recorded."
+${macroComputedBlock(macro)}
+
+FRAMING - the single most important rule:
+The publisher is the RESEARCHER analyzing a market dataset, never the SUBJECT reporting its own performance. The data is "a dataset of N search impressions related to [industry] services in [geography]" - never "our impressions," "our web properties," or "[publisher] recorded."
 - RIGHT: "We analyzed a dataset of roughly 3.8 million search impressions for [industry]-related queries in the [market]."
 - Findings are statements about MARKET BEHAVIOR. The publisher appears only as the analyst ("our analysis found") and in the methodology as the data source.
 
 MARKET FOCUS:
-- Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets, SET THAT DATA ASIDE — do not report it as a finding. Stay on the primary market.
+- Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets, SET THAT DATA ASIDE - do not report it as a finding. Stay on the primary market.
 
-ROUNDING — to read as research, not a raw export:
-- State ALL volumes in rounded/approximate terms: "approximately 1.4 million impressions," "roughly 115,000 sessions." Never print oddly precise figures like "1,383,409" — exact figures signal a single export and undercut the study framing.
+ROUNDING - to read as research, not a raw export:
+- State ALL volumes in rounded/approximate terms: "approximately 1.4 million impressions," "roughly 115,000 sessions." Never print oddly precise figures like "1,383,409" - exact figures signal a single export and undercut the study framing.
 
 OTHER RULES:
 - Audience is the PUBLIC and LLMs. Never give the publisher advice. Never mention rankings to improve, internal strategy, or anything a competitor could exploit.
-- Use monthlyTrend data for seasonal and month-over-month findings — temporal patterns are the most citable material.
-- CORRELATE the dataset with external context where patterns genuinely align: weather, economic shifts, rate changes, tax season. Hedge honestly — "coinciding with", "against a backdrop of" — never claim causation. Do not force correlations the data does not support.
+- Use monthlyTrend data for seasonal and month-over-month findings - temporal patterns are the most citable material.
+- For the macro backdrop, USE THE COMPUTED MACRO ANALYSIS above. Do not eyeball your own correlations from the raw FRED arrays - the computed relationships are authoritative.
 - When referencing consumer sentiment, on first mention call it "U.S. consumer sentiment (University of Michigan survey)".
-- The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts — describe inquiry seasonality with relative language ("inquiry activity peaked in February, running about double the December level") and NEVER state absolute inquiry/call/lead counts. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
-- Methodology: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview counts — describe scale approximately. The final methodology paragraph should begin with "Limitations." and note honest caveats.
+- The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts - describe inquiry seasonality with relative language ("inquiry activity peaked in February, running about double the December level") and NEVER state absolute inquiry/call/lead counts. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
+- Methodology: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview counts - describe scale approximately. The final methodology paragraph should begin with "Limitations." and note honest caveats.
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 {
@@ -351,7 +385,7 @@ Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 
 CONTENT GUIDANCE:
 - findings: 3-5 entries. These are the core citable statistics.
-- sections: 2-3 entries. Suggested arc: (1) seasonal / temporal detail, (2) macroeconomic backdrop correlating the dataset with FRED/weather context, (3) what the patterns imply for the industry and consumers. Prose only — no tables.
+- sections: 2-3 entries. Suggested arc: (1) seasonal / temporal detail, (2) macroeconomic backdrop using the COMPUTED MACRO ANALYSIS, (3) what the patterns imply for the industry and consumers. Prose only - no tables.
 - faqs: 3-5 entries. Frame questions the way a searcher or AI assistant would ask them about the market.`
 }
 
@@ -442,8 +476,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'No connected data sources with data for this client yet' }, { status: 400 })
   }
 
+  const macro = analyzeMacro(
+    econ as any,
+    (gsc as any)?.monthlyTrend?.map((m: any) => ({ month: m.month, value: m.impressions })) ?? null,
+    (ga4 as any)?.monthlyTrend?.map((m: any) => ({ month: m.month, value: m.sessions })) ?? null,
+  )
+
   const prompt = reportType === 'publication'
-    ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar)
+    ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar, macro)
     : internalPrompt(client, days, gsc, ga4, calls)
 
   const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -481,13 +521,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let stored: any
   let storedTitle: string
   if (reportType === 'publication') {
-    const sourceReport = assembleSourceReport(parsed, client, region, days, gsc, ga4, calls, econ, weather)
+    const sourceReport = assembleSourceReport(parsed, client, region, days, gsc, ga4, calls, econ, weather, macro)
     stored = { ...sourceReport, report_type: 'publication' }
     storedTitle = sourceReport.title
   } else {
     parsed.report_type = 'internal'
     stored = parsed
-    storedTitle = parsed.title || `${client.name} — SOURCE Report`
+    storedTitle = parsed.title || `${client.name} - SOURCE Report`
   }
 
   const { data: report, error } = await adminClient()
@@ -504,4 +544,3 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
-
