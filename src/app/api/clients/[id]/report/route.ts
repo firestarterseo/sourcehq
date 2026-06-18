@@ -7,7 +7,7 @@ import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/exter
 import { getRegion } from '@/lib/regions'
 import { analyzeMacro } from '@/lib/macro-analysis'
 import type { MacroAnalysis } from '@/lib/macro-analysis'
-import { buildLineChart } from '@/lib/report-chart'
+import { buildLineChart, buildComparisonChart } from '@/lib/report-chart'
 import type { ReportChart } from '@/lib/report-chart'
 import type { SourceReport, ReportStat, ReportFinding, ReportSection, ReportFAQ } from '@/lib/report-types'
 
@@ -246,24 +246,63 @@ function buildDataSources(gsc: any, ga4: any, calls: any, econ: any, weather: an
   return out
 }
 
+// Bucket a thinned FRED series (daily/weekly points with date fields) to
+// monthly averages so it aligns with the monthly demand series.
+function bucketMonthly(series: any): { month: string; value: number }[] {
+  if (!Array.isArray(series)) return []
+  const buckets: Record<string, { sum: number; n: number }> = {}
+  for (const p of series) {
+    const date = p?.date
+    const val = Number(p?.value)
+    if (!date || !Number.isFinite(val)) continue
+    const month = String(date).slice(0, 7)
+    buckets[month] = buckets[month] || { sum: 0, n: 0 }
+    buckets[month].sum += val
+    buckets[month].n += 1
+  }
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, b]) => ({ month, value: b.sum / b.n }))
+}
+
 // Build the snapshot charts deterministically from the monthly trend data.
-function buildCharts(gsc: any, ga4: any): ReportChart[] {
+function buildCharts(gsc: any, ga4: any, econ: any): ReportChart[] {
   const charts: ReportChart[] = []
+
+  // 1) Demand-by-month line (GSC impressions, GA4 sessions fallback).
+  let demandMonthly: { month: string; value: number }[] = []
+  let demandLabel = ''
   if (gsc?.monthlyTrend?.length >= 2) {
-    const c = buildLineChart({
-      title: 'Search demand by month',
-      unitLabel: 'Search impressions',
-      points: gsc.monthlyTrend.map((m: any) => ({ month: m.month, value: m.impressions })),
-    })
+    demandMonthly = gsc.monthlyTrend.map((m: any) => ({ month: m.month, value: m.impressions }))
+    demandLabel = 'Search demand'
+    const c = buildLineChart({ title: 'Search demand by month', unitLabel: 'Search impressions', points: demandMonthly })
     if (c) charts.push(c)
   } else if (ga4?.monthlyTrend?.length >= 2) {
-    const c = buildLineChart({
-      title: 'Web sessions by month',
-      unitLabel: 'Web sessions',
-      points: ga4.monthlyTrend.map((m: any) => ({ month: m.month, value: m.sessions })),
-    })
+    demandMonthly = ga4.monthlyTrend.map((m: any) => ({ month: m.month, value: m.sessions }))
+    demandLabel = 'Web sessions'
+    const c = buildLineChart({ title: 'Web sessions by month', unitLabel: 'Web sessions', points: demandMonthly })
     if (c) charts.push(c)
   }
+
+  // 2) Indexed comparison: demand vs. external economic context.
+  if (demandMonthly.length >= 2 && econ) {
+    const comparison = buildComparisonChart('Demand vs. economic context (indexed)', [
+      { label: demandLabel, monthly: demandMonthly, anchor: true },
+      { label: 'Consumer sentiment', monthly: bucketMonthly(econ.us_consumer_sentiment_index) },
+      { label: 'S&P 500', monthly: bucketMonthly(econ.sp500_index_close) },
+      { label: '30-yr mortgage rate', monthly: bucketMonthly(econ.us_30yr_mortgage_rate_pct) },
+    ])
+    if (comparison) {
+      // Adapt ComparisonChart into the ReportChart shape the export renders.
+      charts.push({
+        title: comparison.title,
+        unitLabel: 'Indexed to 100 at window start',
+        svg: comparison.svg,
+        points: comparison.rows.map(r => ({ month: r.month, value: r.values[0] ?? 0 })),
+      })
+    }
+  }
+
   return charts
 }
 
@@ -506,7 +545,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     (ga4 as any)?.monthlyTrend?.map((m: any) => ({ month: m.month, value: m.sessions })) ?? null,
   )
 
-  const charts = buildCharts(gsc, ga4)
+  const charts = buildCharts(gsc, ga4, econ)
 
   const prompt = reportType === 'publication'
     ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar, macro)
@@ -570,3 +609,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
+
+
