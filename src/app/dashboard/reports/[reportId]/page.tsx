@@ -167,11 +167,11 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
           </div>
           {report && isPublication && (
             <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-              <button onClick={copySchema} style={{ ...btn(schemaCopied), background: schemaCopied ? '#10B981' : 'transparent', color: schemaCopied ? '#fff' : '#6D28D9', border: '0.5px solid #6D28D9' }}>
-                {schemaCopied ? 'Copied!' : 'Copy schema'}
-              </button>
               <button onClick={copyHtml} style={btn(copied)}>
                 {copied ? 'Copied!' : 'Copy as HTML'}
+              </button>
+              <button onClick={copySchema} style={{ ...btn(schemaCopied), background: schemaCopied ? '#10B981' : 'transparent', color: schemaCopied ? '#fff' : '#6D28D9', border: '0.5px solid #6D28D9' }}>
+                {schemaCopied ? 'Copied!' : 'Copy schema'}
               </button>
             </div>
           )}
@@ -244,3 +244,4 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     </div>
   )
 }
+
