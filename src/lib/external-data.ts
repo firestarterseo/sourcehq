@@ -24,15 +24,19 @@ async function fredSeries(seriesId: string, days: number) {
 }
 
 export async function getEconomicData(days: number, fredUnemployment: string | null = 'DENV708URN') {
-  const [denverUnemployment, consumerSentiment, mortgage30, fedFunds, sp500] = await Promise.all([
+  const [localUnemployment, consumerSentiment, mortgage30, fedFunds, sp500, housingStarts, buildingPermits, disposableIncome, savingsRate] = await Promise.all([
     fredSeries(fredUnemployment || 'UNRATE', days),   // metro unemployment, or national fallback
     fredSeries('UMCSENT', days),      // University of Michigan consumer sentiment
     fredSeries('MORTGAGE30US', days), // 30-year fixed mortgage average
     fredSeries('FEDFUNDS', days),     // Federal funds effective rate
     fredSeries('SP500', days),        // S&P 500 daily close (price index, no dividends)
+    fredSeries('HOUST', days),        // national housing starts (annualized, thousands)
+    fredSeries('PERMIT', days),       // national building permits (annualized, thousands)
+    fredSeries('DSPI', days),         // disposable personal income (national)
+    fredSeries('PSAVERT', days),      // personal saving rate (national, %)
   ])
 
-  if (!denverUnemployment && !consumerSentiment && !mortgage30 && !fedFunds && !sp500) return null
+  if (!localUnemployment && !consumerSentiment && !mortgage30 && !fedFunds && !sp500 && !housingStarts && !buildingPermits && !disposableIncome && !savingsRate) return null
 
   // Thin weekly series to monthly-ish to keep the prompt compact
   const thin = (arr: any[] | null) => {
@@ -43,11 +47,17 @@ export async function getEconomicData(days: number, fredUnemployment: string | n
   }
 
   return {
-    local_unemployment_rate_pct: thin(denverUnemployment),
+    // Local series (metro-level where available)
+    local_unemployment_rate_pct: thin(localUnemployment),
+    // National context series
     us_consumer_sentiment_index: thin(consumerSentiment),
     us_30yr_mortgage_rate_pct: thin(mortgage30),
     fed_funds_rate_pct: thin(fedFunds),
     sp500_index_close: thin(sp500),
+    us_housing_starts: thin(housingStarts),
+    us_building_permits: thin(buildingPermits),
+    us_disposable_income: thin(disposableIncome),
+    us_personal_saving_rate_pct: thin(savingsRate),
   }
 }
 
@@ -123,15 +133,8 @@ export function getCalendarContext(days: number) {
   })
 
   return {
-    note: '2026 is a US midterm election year; political ad spend typically inflates digital advertising costs and can crowd attention in Q3–Q4. Colorado school year runs mid-Aug to late May.',
+    note: '2026 is a US midterm election year; political ad spend typically inflates digital advertising costs and can crowd attention in Q3-Q4. Colorado school year runs mid-Aug to late May.',
     events_in_data_window: inWindow,
     upcoming_events: upcoming,
   }
 }
-
-
-
-
-
-
-
