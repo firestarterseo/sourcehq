@@ -7,6 +7,8 @@ import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/exter
 import { getRegion } from '@/lib/regions'
 import { analyzeMacro } from '@/lib/macro-analysis'
 import type { MacroAnalysis } from '@/lib/macro-analysis'
+import { buildLineChart } from '@/lib/report-chart'
+import type { ReportChart } from '@/lib/report-chart'
 import type { SourceReport, ReportStat, ReportFinding, ReportSection, ReportFAQ } from '@/lib/report-types'
 
 export const maxDuration = 300
@@ -244,9 +246,30 @@ function buildDataSources(gsc: any, ga4: any, calls: any, econ: any, weather: an
   return out
 }
 
+// Build the snapshot charts deterministically from the monthly trend data.
+function buildCharts(gsc: any, ga4: any): ReportChart[] {
+  const charts: ReportChart[] = []
+  if (gsc?.monthlyTrend?.length >= 2) {
+    const c = buildLineChart({
+      title: 'Search demand by month',
+      unitLabel: 'Search impressions',
+      points: gsc.monthlyTrend.map((m: any) => ({ month: m.month, value: m.impressions })),
+    })
+    if (c) charts.push(c)
+  } else if (ga4?.monthlyTrend?.length >= 2) {
+    const c = buildLineChart({
+      title: 'Web sessions by month',
+      unitLabel: 'Web sessions',
+      points: ga4.monthlyTrend.map((m: any) => ({ month: m.month, value: m.sessions })),
+    })
+    if (c) charts.push(c)
+  }
+  return charts
+}
+
 function assembleSourceReport(
   ai: any, client: any, region: any, days: number,
-  gsc: any, ga4: any, calls: any, econ: any, weather: any, macro: MacroAnalysis
+  gsc: any, ga4: any, calls: any, econ: any, weather: any, macro: MacroAnalysis, charts: ReportChart[]
 ): SourceReport {
   const publisher = String(client.publisherName || `${client.name} Research`).trim()
   const publisherUrl = client.website || undefined
@@ -291,6 +314,7 @@ function assembleSourceReport(
     methodology: Array.isArray(ai.methodology) ? ai.methodology.map(String) : [],
     dataSources: buildDataSources(gsc, ga4, calls, econ, weather),
     macro,
+    charts,
     keywords: Array.isArray(ai.keywords) ? ai.keywords.map(String) : [],
     about: Array.isArray(ai.about) ? ai.about.map(String) : [],
     abstract: String(ai.abstract || ai.dek || ''),
@@ -321,7 +345,7 @@ Directional relationship to demand (computed):
 ${coLines}
 
 HOW TO USE THIS:
-- When you discuss the macro backdrop, describe the COMPUTED relationships above using the real percentages. Example: "search demand rose ~14% over the window while consumer sentiment fell ~6%, a divergence" — using the actual computed numbers.
+- When you discuss the macro backdrop, describe the COMPUTED relationships above using the real percentages. Example: "search demand rose ~14% over the window while consumer sentiment fell ~6%, a divergence" - using the actual computed numbers.
 - You may use correlation language ("moved in step with", "moved inversely to", "diverged from") ONLY for the computed co-movements above. Always hedge causation ("coinciding with", not "caused by").
 - For any economic indicator WITHOUT a computed co-movement, or if the relationship is "unrelated", report its window change as standalone CONTEXT only - state the figure, do not tie it to demand.
 - Keep the LOCAL findings (search/sessions/inquiry seasonality, weather) as the lead. The national economic indicators are supporting context, not the headline.`
@@ -482,6 +506,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     (ga4 as any)?.monthlyTrend?.map((m: any) => ({ month: m.month, value: m.sessions })) ?? null,
   )
 
+  const charts = buildCharts(gsc, ga4)
+
   const prompt = reportType === 'publication'
     ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar, macro)
     : internalPrompt(client, days, gsc, ga4, calls)
@@ -521,7 +547,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let stored: any
   let storedTitle: string
   if (reportType === 'publication') {
-    const sourceReport = assembleSourceReport(parsed, client, region, days, gsc, ga4, calls, econ, weather, macro)
+    const sourceReport = assembleSourceReport(parsed, client, region, days, gsc, ga4, calls, econ, weather, macro, charts)
     stored = { ...sourceReport, report_type: 'publication' }
     storedTitle = sourceReport.title
   } else {

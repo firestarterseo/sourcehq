@@ -3,8 +3,14 @@
 // blog-publishing artifacts: a paste-safe semantic HTML fragment (no CSS,
 // no classes - inherits the host theme) and a JSON-LD schema object that
 // lives in the site schema/header plugin, never in the post body.
+//
+// Charts are the one exception to the no-styling rule: an SVG must carry its
+// own minimal, brand-neutral styling to render at all. Each chart is followed
+// by a data table so the figures stay machine-readable for LLMs and survive
+// editors that strip SVG.
 
 import type { SourceReport, ReportTable } from './report-types';
+import type { ReportChart } from './report-chart';
 
 function esc(s: string): string {
   return String(s)
@@ -20,6 +26,27 @@ function renderTable(t: ReportTable): string {
     .join('\n    ');
   const caption = t.caption ? `\n  <caption>${esc(t.caption)}</caption>` : '';
   return `<table>${caption}\n  <thead>${head}</thead>\n  <tbody>\n    ${body}\n  </tbody>\n</table>`;
+}
+
+function shortMonth(m: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(m);
+  if (!match) return m;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return (months[Number(match[2]) - 1] || match[2]) + ' ' + match[1].slice(2);
+}
+
+function renderCharts(charts: ReportChart[]): string {
+  return charts
+    .map((ch) => {
+      const rows = ch.points
+        .map((p) => `    <tr><td>${esc(shortMonth(p.month))}</td><td>${esc(String(p.value))}</td></tr>`)
+        .join('\n');
+      const table =
+        `<table>\n  <caption>${esc(ch.title)} - data</caption>\n  <thead><tr><th>Month</th><th>${esc(ch.unitLabel)}</th></tr></thead>\n  <tbody>\n${rows}\n  </tbody>\n</table>`;
+      // figure wraps the SVG; the table follows so the numbers are always readable.
+      return `<figure>\n${ch.svg}\n<figcaption>${esc(ch.title)}</figcaption>\n</figure>\n${table}`;
+    })
+    .join('\n\n');
 }
 
 export function renderContentHtml(report: SourceReport): string {
@@ -53,6 +80,11 @@ export function renderContentHtml(report: SourceReport): string {
   if (report.executiveSummary && report.executiveSummary.length) {
     parts.push('<h2>Executive summary</h2>');
     report.executiveSummary.forEach((p) => parts.push(`<p>${esc(p)}</p>`));
+  }
+
+  // Lead visual: chart(s) right after the summary, before the detailed findings.
+  if (report.charts && report.charts.length) {
+    parts.push(renderCharts(report.charts));
   }
 
   if (report.findings && report.findings.length) {

@@ -3,6 +3,7 @@
 // The generator produces this shape; the styled preview, the PDF, and the
 // blog exporter all consume it. One contract, three render targets.
 import type { MacroAnalysis } from '@/lib/macro-analysis'
+import type { ReportChart } from '@/lib/report-chart'
 
 export interface ReportStat {
   label: string;
@@ -46,6 +47,8 @@ export interface SourceReport {
   dataSources: string[];      // bullet list items
   // Computed macro analysis (deterministic; numbers from code, not the LLM)
   macro?: MacroAnalysis;
+  // Charts snapshotted at generation (SVG + data points for an adjacent table)
+  charts?: ReportChart[];
   // Schema / metadata
   keywords: string[];
   about: string[];
