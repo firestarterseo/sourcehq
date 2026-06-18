@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import type { SourceReport } from '@/lib/report-types'
-import { renderContentHtml, renderSchemaScriptTag } from '@/lib/report-export'
+import { renderContentHtml, renderSchemaScriptTag, renderSchemaJson } from '@/lib/report-export'
 
 interface InternalContent {
   title?: string
@@ -57,6 +57,26 @@ const PREVIEW_CSS = `
 .srcv em{color:#5c6168;}
 `
 
+function slugify(s: string): string {
+  return (s || 'report')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'report'
+}
+
+function downloadFile(filename: string, text: string, mime: string) {
+  const blob = new Blob([text], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 function InternalSection({ title, items, color }: { title: string; items?: string[]; color: string }) {
   if (!items || items.length === 0) return null
   return (
@@ -98,6 +118,7 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
 
   // The single source of truth: the in-app preview renders exactly what Copy emits.
   const contentHtml = isPublication && c ? renderContentHtml(c as SourceReport) : ''
+  const fileBase = report ? slugify(report.title) : 'report'
 
   async function copyHtml() {
     if (!contentHtml) return
@@ -115,6 +136,16 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
       setSchemaCopied(true)
       setTimeout(() => setSchemaCopied(false), 2500)
     } catch {}
+  }
+
+  function downloadHtml() {
+    if (!contentHtml) return
+    downloadFile(`${fileBase}.html`, contentHtml, 'text/html;charset=utf-8')
+  }
+
+  function downloadSchema() {
+    if (!isPublication || !c) return
+    downloadFile(`${fileBase}.schema.json`, renderSchemaJson(c as SourceReport), 'application/json;charset=utf-8')
   }
 
   async function runDerivative(key: string) {
@@ -151,11 +182,16 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     padding: '7px 16px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', flexShrink: 0,
   } as const)
 
+  const ghostBtn = {
+    background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9', borderRadius: '8px',
+    padding: '7px 14px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', flexShrink: 0,
+  } as const
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
       <Sidebar active="Reports" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
-        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
             <Link href="/dashboard/reports" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', flexShrink: 0 }}>← Reports</Link>
             {report && (
@@ -166,13 +202,15 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
             )}
           </div>
           {report && isPublication && (
-            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', padding: '8px 0' }}>
               <button onClick={copyHtml} style={btn(copied)}>
-                {copied ? 'Copied!' : 'Copy as HTML'}
+                {copied ? 'Copied!' : 'Copy HTML'}
               </button>
-              <button onClick={copySchema} style={{ ...btn(schemaCopied), background: schemaCopied ? '#10B981' : 'transparent', color: schemaCopied ? '#fff' : '#6D28D9', border: '0.5px solid #6D28D9' }}>
+              <button onClick={copySchema} style={{ ...btn(schemaCopied), ...(schemaCopied ? {} : { background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9' }) }}>
                 {schemaCopied ? 'Copied!' : 'Copy schema'}
               </button>
+              <button onClick={downloadHtml} style={ghostBtn}>Download .html</button>
+              <button onClick={downloadSchema} style={ghostBtn}>Download .json</button>
             </div>
           )}
         </div>
@@ -244,4 +282,3 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     </div>
   )
 }
-
