@@ -48,8 +48,11 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     const ga4Properties: { id: string; name: string; account: string }[] = []
 
     for (const { email, token } of tokens) {
-      // GSC sites for this account.
-      const gscRes = await fetch(`${GSC_API}/sites`, { headers: { Authorization: `Bearer ${token}` } })
+      const [gscRes, ga4Res] = await Promise.all([
+        fetch(`${GSC_API}/sites`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${ADMIN_API}/accountSummaries`, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+
       if (gscRes.ok) {
         const gscJson = await gscRes.json()
         for (const s of gscJson.siteEntry || []) {
@@ -58,53 +61,25 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         }
       }
 
-      // GA4 accountSummaries is PAGINATED (returns nextPageToken). Without
-      // paging, an account with many GA accounts silently drops everything past
-      // the first page - which is why a real property could be missing from the
-      // picker. Page through fully.
-      let pageToken: string | undefined = undefined
-      let guard = 0
-      do {
-        const u = new URL(`${ADMIN_API}/accountSummaries`)
-        u.searchParams.set('pageSize', '200')
-        if (pageToken) u.searchParams.set('pageToken', pageToken)
-        const ga4Res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${token}` } })
-        if (!ga4Res.ok) break
+      if (ga4Res.ok) {
         const ga4Json = await ga4Res.json()
         for (const acct of ga4Json.accountSummaries || []) {
           for (const prop of acct.propertySummaries || []) {
             ga4Properties.push({ id: prop.property, name: prop.displayName, account: email })
           }
         }
-        pageToken = ga4Json.nextPageToken || undefined
-        guard++
-      } while (pageToken && guard < 20)
+      }
     }
 
-    // De-dupe: a property visible to more than one connected account should
-    // appear once.
-    const seenGsc = new Set<string>()
-    const dedupGsc = gscSites.filter(s => {
-      if (seenGsc.has(s.url)) return false
-      seenGsc.add(s.url)
-      return true
-    })
-    const seenGa4 = new Set<string>()
-    const dedupGa4 = ga4Properties.filter(p => {
-      if (seenGa4.has(p.id)) return false
-      seenGa4.add(p.id)
-      return true
-    })
-
-    dedupGsc.sort((a, b) => a.url.localeCompare(b.url))
-    dedupGa4.sort((a, b) => a.name.localeCompare(b.name))
+    gscSites.sort((a, b) => a.url.localeCompare(b.url))
+    ga4Properties.sort((a, b) => a.name.localeCompare(b.name))
 
     return NextResponse.json({
       connected: true,
       mode: auth.mode,
       multiAccount: tokens.length > 1,
-      gscSites: dedupGsc,
-      ga4Properties: dedupGa4,
+      gscSites,
+      ga4Properties,
       selected: {
         gsc: auth.selection.gsc_property || null,
         ga4: auth.selection.ga4_property || null,
