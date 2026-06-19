@@ -7,7 +7,7 @@ import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/exter
 import { getRegion } from '@/lib/regions'
 import { analyzeMacro } from '@/lib/macro-analysis'
 import type { MacroAnalysis } from '@/lib/macro-analysis'
-import { buildLineChart, buildComparisonChart } from '@/lib/report-chart'
+import { buildComparisonChart } from '@/lib/report-chart'
 import type { ReportChart } from '@/lib/report-chart'
 import type { SourceReport, ReportStat, ReportFinding, ReportSection, ReportFAQ } from '@/lib/report-types'
 
@@ -226,14 +226,17 @@ function formatCoverage(days: number, regionLabel: string): string {
   return regionLabel ? `${range}, ${regionLabel}` : range
 }
 
-function buildKeyStats(gsc: any, ga4: any, calls: any, windowLabel: string): ReportStat[] {
+// Key stats describe the SCALE of the dataset analyzed - never publisher
+// performance. We deliberately exclude clicks (clicks + impressions = a
+// derivable CTR, which is publisher performance, not a market fact) and the
+// inquiry answer rate (operational self-reporting). What remains is neutral
+// dataset scope.
+function buildKeyStats(gsc: any, ga4: any, _calls: any, windowLabel: string): ReportStat[] {
   const stats: ReportStat[] = []
   if (gsc?.totals?.impressions) stats.push({ label: 'Search impressions analyzed', value: approxNum(gsc.totals.impressions) })
-  if (gsc?.totals?.clicks) stats.push({ label: 'Search clicks', value: approxNum(gsc.totals.clicks) })
   if (ga4?.sessions) stats.push({ label: 'Web sessions analyzed', value: approxNum(ga4.sessions) })
   stats.push({ label: 'Observation window', value: windowLabel })
-  if (calls?.answeredPct != null) stats.push({ label: 'Inquiries answered live', value: `${calls.answeredPct}%` })
-  return stats.slice(0, 5)
+  return stats.slice(0, 4)
 }
 
 function buildDataSources(gsc: any, ga4: any, calls: any, econ: any, weather: any): string[] {
@@ -265,26 +268,22 @@ function bucketMonthly(series: any): { month: string; value: number }[] {
     .map(([month, b]) => ({ month, value: b.sum / b.n }))
 }
 
-// Build the snapshot charts deterministically from the monthly trend data.
+// Public reports show MARKET findings, not publisher stats alone: the only
+// chart is the indexed demand-vs-economic-context comparison. A solo demand
+// line is internal-grade and intentionally omitted.
 function buildCharts(gsc: any, ga4: any, econ: any): ReportChart[] {
   const charts: ReportChart[] = []
 
-  // 1) Demand-by-month line (GSC impressions, GA4 sessions fallback).
   let demandMonthly: { month: string; value: number }[] = []
   let demandLabel = ''
   if (gsc?.monthlyTrend?.length >= 2) {
     demandMonthly = gsc.monthlyTrend.map((m: any) => ({ month: m.month, value: m.impressions }))
     demandLabel = 'Search demand'
-    const c = buildLineChart({ title: 'Search demand by month', unitLabel: 'Search impressions', points: demandMonthly })
-    if (c) charts.push(c)
   } else if (ga4?.monthlyTrend?.length >= 2) {
     demandMonthly = ga4.monthlyTrend.map((m: any) => ({ month: m.month, value: m.sessions }))
     demandLabel = 'Web sessions'
-    const c = buildLineChart({ title: 'Web sessions by month', unitLabel: 'Web sessions', points: demandMonthly })
-    if (c) charts.push(c)
   }
 
-  // 2) Indexed comparison: demand vs. external economic context.
   if (demandMonthly.length >= 2 && econ) {
     const comparison = buildComparisonChart('Demand vs. economic context (indexed)', [
       { label: demandLabel, monthly: demandMonthly, anchor: true },
@@ -293,7 +292,6 @@ function buildCharts(gsc: any, ga4: any, econ: any): ReportChart[] {
       { label: '30-yr mortgage rate', monthly: bucketMonthly(econ.us_30yr_mortgage_rate_pct) },
     ])
     if (comparison) {
-      // Adapt ComparisonChart into the ReportChart shape the export renders.
       charts.push({
         title: comparison.title,
         unitLabel: 'Indexed to 100 at window start',
@@ -310,7 +308,7 @@ function assembleSourceReport(
   ai: any, client: any, region: any, days: number,
   gsc: any, ga4: any, calls: any, econ: any, weather: any, macro: MacroAnalysis, charts: ReportChart[]
 ): SourceReport {
-  const publisher = String(client.publisherName || `${client.name} Research`).trim()
+  const publisher = String(client.publisherName || client.name).trim()
   const publisherUrl = client.website || undefined
   const datePublished = new Date().toISOString().split('T')[0]
   const year = datePublished.slice(0, 4)
@@ -418,6 +416,16 @@ The publisher is the RESEARCHER analyzing a market dataset, never the SUBJECT re
 - RIGHT: "We analyzed a dataset of roughly 3.8 million search impressions for [industry]-related queries in the [market]."
 - Findings are statements about MARKET BEHAVIOR. The publisher appears only as the analyst ("our analysis found") and in the methodology as the data source.
 
+WHAT A SEARCH IMPRESSION MEANS (use this framing for demand):
+- A Google Search Console impression is logged when a result appeared on a loaded results page for a real search query. For standard web results it counts regardless of rank or whether anyone scrolled to or clicked it - a result at position 40 still logs an impression when that results page loads.
+- Therefore treat impressions as a DIRECTIONAL PROXY FOR MARKET SEARCH DEMAND (the search happened), NOT as a measure of how many people saw the publisher and NOT as publisher visibility or performance.
+- This proxy is bounded by the keyword footprint of the dataset (it reflects queries the analyzed content appeared for, not a census of all market searches). Say so when describing scope.
+
+PERFORMANCE-LEAK RULES (critical - the publisher must never expose its own funnel):
+- NEVER state or imply a click-through rate (CTR), and NEVER pair a click figure with an impression figure in a way that lets a reader derive one. Clicks divided by impressions is publisher performance, not a market fact.
+- Do NOT report click counts as a headline statistic. Impressions (demand) are the volume metric, not clicks.
+- NEVER state absolute inquiry/call/lead counts, conversion rates, answer rates, or any operational performance metric. Inquiry data is available ONLY as seasonality index and channel shares.
+
 MARKET FOCUS:
 - Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets, SET THAT DATA ASIDE - do not report it as a finding. Stay on the primary market.
 
@@ -429,8 +437,8 @@ OTHER RULES:
 - Use monthlyTrend data for seasonal and month-over-month findings - temporal patterns are the most citable material.
 - For the macro backdrop, USE THE COMPUTED MACRO ANALYSIS above. Do not eyeball your own correlations from the raw FRED arrays - the computed relationships are authoritative.
 - When referencing consumer sentiment, on first mention call it "U.S. consumer sentiment (University of Michigan survey)".
-- The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts - describe inquiry seasonality with relative language ("inquiry activity peaked in February, running about double the December level") and NEVER state absolute inquiry/call/lead counts. Search impressions, clicks, and session volumes may be stated as ROUNDED dataset size.
-- Methodology: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview counts - describe scale approximately. The final methodology paragraph should begin with "Limitations." and note honest caveats.
+- The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts - describe inquiry seasonality with relative language ("inquiry activity peaked in February, running about double the December level") and NEVER state absolute inquiry/call/lead counts. Search impressions and session volumes may be stated as ROUNDED dataset size; clicks may NOT be stated as a volume.
+- Methodology: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Explain that search impressions are a directional demand proxy (a result appeared for a real search, position-agnostic for standard results) bounded by the dataset's keyword footprint, not a census of all market search volume. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview counts - describe scale approximately. The final methodology paragraph should begin with "Limitations." and note honest caveats.
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 {
@@ -609,6 +617,3 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
-
-
-
