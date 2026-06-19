@@ -35,9 +35,6 @@ const CSS = `
 .srv figure{margin:26px 0;}
 .srv figure svg{display:block;max-width:100%;height:auto;}
 .srv figcaption{font-style:italic;font-size:15px;color:#1A1A17;line-height:1.45;margin-top:12px;padding-left:14px;border-left:3px solid #1F4D3A;}
-.srv figure{margin:26px 0;}
-.srv figure svg{display:block;max-width:100%;height:auto;}
-.srv figcaption{font-style:italic;font-size:15px;color:#1A1A17;line-height:1.45;margin-top:12px;padding-left:14px;border-left:3px solid #1F4D3A;}
 .srv .foot{font-family:Inter,sans-serif;font-size:11.5px;color:#5C6158;border-top:1px solid #E2DED3;margin-top:40px;padding-top:18px;}
 .srv .toc{background:#fff;border:1px solid #E2DED3;padding:18px 22px;margin:28px 0;}
 .srv .toc .lab{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#B0832E;font-weight:600;margin:0 0 12px;}
@@ -108,13 +105,6 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
           {report.executiveSummary.map((p, i) => <p key={i}>{p}</p>)}
         </>
       )}
-
-      {report.charts?.length ? report.charts.map((ch, i) => (
-        <figure key={i}>
-          <div dangerouslySetInnerHTML={{ __html: ch.svg }} />
-          {ch.caption && <figcaption>{ch.caption}</figcaption>}
-        </figure>
-      )) : null}
 
       {report.charts?.length ? report.charts.map((ch, i) => (
         <figure key={i}>
