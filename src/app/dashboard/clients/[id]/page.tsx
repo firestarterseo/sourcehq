@@ -78,6 +78,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   const [googleConnected, setGoogleConnected] = useState(false)
   const [options, setOptions] = useState<PropertyOptions | null>(null)
+  const [propsLoaded, setPropsLoaded] = useState(false)
   const [selGsc, setSelGsc] = useState('')
   const [selGa4, setSelGa4] = useState('')
   const [savingProps, setSavingProps] = useState(false)
@@ -108,21 +109,38 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       .catch(() => setCallrail(null))
   }
 
+  // On page load: CHEAP, database-only status. Does NOT enumerate Google
+  // properties - that route refreshes tokens and paginates GA4 across accounts
+  // and can be slow; running it on every client page load is what previously
+  // blanked the tiles. The heavy property list loads lazily when the picker opens.
   function loadConnections() {
+    fetch(`/api/clients/${id}/connection-status`)
+      .then(r => r.json())
+      .then(data => { setGoogleConnected(!!data.google) })
+      .catch(() => setGoogleConnected(false))
+
+    loadCallrail()
+  }
+
+  // Heavy: full Google property enumeration + GBP locations. Only called when
+  // the Google picker is opened, never on initial page load.
+  function loadGoogleProperties() {
     fetch(`/api/clients/${id}/google-properties`)
       .then(r => r.json())
       .then(data => {
         setOptions(data)
-        setGoogleConnected(!!data.connected)
+        setPropsLoaded(true)
+        if (data.connected) setGoogleConnected(true)
         if (data.selected?.gsc) setSelGsc(data.selected.gsc)
         if (data.selected?.ga4) setSelGa4(data.selected.ga4)
       })
-      .catch(() => setOptions(null))
-
-    loadCallrail()
+      .catch(() => { setOptions(null); setPropsLoaded(true) })
 
     fetch(`/api/clients/${id}/gbp-locations`).then(r => r.json()).then(d => { setGbpLocations(d); if (d.selected) setSelGbp(d.selected) }).catch(() => setGbpLocations(null))
+  }
 
+  // Heavy: CallRail company list. Only when the CallRail form opens.
+  function loadCallrailCompanies() {
     fetch(`/api/clients/${id}/callrail/companies`)
       .then(r => r.json())
       .then(data => setCrCompanies(data))
@@ -146,6 +164,18 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // Lazy-load the heavy Google property list the first time the picker opens.
+  useEffect(() => {
+    if (showGooglePicker && !propsLoaded) loadGoogleProperties()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGooglePicker])
+
+  // Lazy-load CallRail companies the first time the CallRail form opens.
+  useEffect(() => {
+    if (showCallrailForm && !crCompanies) loadCallrailCompanies()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCallrailForm])
+
   async function handleSaveProperties() {
     setSavingProps(true)
     const ga4Name = options?.ga4Properties?.find((p: any) => p.id === selGa4)?.name || null
@@ -154,7 +184,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gsc_property: selGsc || null, ga4_property: selGa4 || null, ga4_property_name: ga4Name, google_account: gAccount }),
     })
-    loadConnections()
     setSavingProps(false)
     const gbpName = gbpLocations?.locations?.find(l => l.id === selGbp)?.name || null; await fetch(`/api/clients/${id}/gbp-locations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName }) }); setShowGooglePicker(false)
   }
@@ -334,8 +363,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             onManageCallrail={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }}
           />
 
-          {showGooglePicker && googleConnected && options?.connected && (
+          {showGooglePicker && googleConnected && (
             <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '20px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {!propsLoaded ? (
+                <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>Loading properties...</p>
+              ) : !options?.connected ? (
+                <p style={{ fontSize: '12px', color: '#92400E', margin: 0 }}>Could not load Google properties. Try again.</p>
+              ) : (
+              <>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Search Console property</label>
                 <select value={selGsc} onChange={e => setSelGsc(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.gscSites || []).map((s: any) => <option key={s.url} value={s.url}>{s.url}{options.multiAccount ? ' (' + s.account + ')' : ''}</option>)}</select>
@@ -353,6 +388,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   )}
                 </div>
                 <div><button onClick={handleSaveProperties} disabled={savingProps} style={{ background: savingProps ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{savingProps ? 'Saving...' : 'Save properties'}</button></div>
+              </>
+              )}
             </div>
           )}
 
@@ -384,32 +421,3 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
