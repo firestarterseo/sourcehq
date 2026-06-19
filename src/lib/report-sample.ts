@@ -1,120 +1,111 @@
 ﻿// src/lib/report-sample.ts
 // Sample SourceReport used to preview the styled renderer and the blog exporter
-// before live data is wired in. Values kept ASCII-clean on purpose.
+// before live data is wired in. Kept in sync with the LIVE generator's output
+// contract: MARKET-BEHAVIOR only. No publisher-funnel data (acquisition-channel
+// mix, named/ranked pages, inquiry source/answer/first-time rates) - those are
+// redacted from the publication model and must never appear in a sample either.
+// Values kept ASCII-clean on purpose.
 
 import type { SourceReport } from './report-types';
 
 export const SAMPLE_REPORT: SourceReport = {
   title:
-    "Golf School Enrollment Demand in the United States: Seasonal Patterns, Consumer Behavior, and Market Signals, 2025-2026",
+    "Golf School Search Demand in the United States: Seasonal Patterns Across Roughly 1.4 Million Annual Impressions",
   dek:
-    "A first-party analysis of several hundred thousand web sessions and national inbound inquiries across the 13 months ending June 2026, examining when, how, and under what economic conditions U.S. consumers seek structured golf instruction.",
+    "A first-party analysis of approximately 1.4 million search impressions for golf-instruction-related queries across the United States, mapping when consumers research structured golf instruction and the economic backdrop over the study window.",
   publisher: "Bird Golf Research",
   publisherUrl: "https://www.birdgolf.com/",
   datePublished: "2026-06-15",
   coverage: "June 2025 to June 2026, United States",
   canonicalUrl: "https://www.birdgolf.com/research/golf-school-demand-2026/",
   citation:
-    "Cite this report as: Bird Golf Research (2026). Golf School Enrollment Demand in the United States: Seasonal Patterns, Consumer Behavior, and Market Signals, 2025-2026.",
+    "Cite this report as: Bird Golf Research (2026). Golf School Search Demand in the United States: Seasonal Patterns Across Roughly 1.4 Million Annual Impressions.",
 
   keyStats: [
-    { label: "Peak demand month (January 2026)", value: "~15,600 sessions" },
-    { label: "January demand vs. seasonal low", value: "~4x" },
-    { label: "Strongest two-month window (Mar-Apr 2026)", value: "~28,600 sessions" },
-    { label: "Seasonal low (Jun 2025 / Jun 2026)", value: "~3,900 / ~5,600" },
-    { label: "Inbound inquiries answered", value: "~96%" },
-    { label: "Inquiries from first-time callers", value: "~82%" },
-    { label: "Phone inquiries via Google Ads", value: "~96%" },
-    { label: "Web traffic mix (organic / paid search / paid social)", value: "26% / 21% / 20%" },
-    { label: "Women's instruction content rank", value: "Top 5 (~4,000 sessions)" },
-    { label: "Consumer sentiment (Jul 2025 to Apr 2026)", value: "61.7 to 49.8 (-11.9)" },
-    { label: "S&P 500 change over window", value: "~ +24%" },
+    { label: "Search impressions analyzed", value: "~1.4 million" },
+    { label: "Web sessions analyzed", value: "~130,000" },
+    { label: "Observation window", value: "June 2025 - June 2026" },
   ],
 
   executiveSummary: [
-    "Demand for structured golf instruction in the United States is defined by strong winter-to-spring demand surges, near-total reliance on paid search as the primary inquiry driver, and a meaningful and growing women's golf instruction segment. Web traffic peaked in January and April 2026, with January generating the highest single-month session volume in the study.",
-    "Against a backdrop of compressed consumer sentiment and unemployment hovering near 4.3 to 4.4 percent through most of the window, demand for structured golf instruction remained broadly stable, suggesting the category retains resilience among its target audience and behaves as a durable discretionary purchase rather than a cyclical one.",
+    "Consumer search demand for golf instruction in the United States follows a clearly defined seasonal cycle. An analysis of approximately 1.4 million search impressions across a twelve-month dataset finds that demand peaks sharply in April and reaches its annual low in June, a peak-to-trough ratio of roughly 2.9 to one. This recurring arc reflects the planning horizon of consumers who research multi-day instruction in the weeks before the outdoor playing season rather than at the moment they begin to play.",
+    "Inbound inquiry activity, measured as a relative monthly index, follows a partially different rhythm: while search demand crests in spring, inquiry timing shows sustained elevation across the October-through-March window, indicating that a meaningful share of the market researches and reaches out well ahead of the season. Against a mixed macroeconomic backdrop, demand held to its seasonal calendar, suggesting the category behaves as a durable discretionary interest rather than a cyclical one.",
   ],
 
   findings: [
-    { heading: "January is the demand peak", body: "January 2026 was the single highest-traffic month in the 13-month study, generating approximately 15,600 web sessions, roughly four times the volume recorded at the June 2025 seasonal low." },
-    { heading: "High-intent activity concentrates across December to April", body: "March and April 2026 together generated approximately 28,600 web sessions, the strongest back-to-back two-month performance in the study, aligning with the pre-season period when golfers in northern climates begin scheduling instruction." },
-    { heading: "Discovery and inquiry funnels diverge sharply", body: "Web discovery is distributed across organic search (~26%), paid search (~21%), and paid social (~20%) with no dominant source. Phone inquiries, by contrast, were heavily concentrated: approximately 96% came from Google Ads. Discovery is diversified; conversion to inquiry is not." },
-    { heading: "Inquiry quality is exceptionally high", body: "Approximately 96% of recorded inquiries were answered, and an estimated 82% originated from first-time contacts, indicating a market characterized by new-customer acquisition rather than repeat engagement." },
-    { heading: "Women's instruction is a distinct, underserved segment", body: "Dedicated women's golf school content ranked among the top five most-visited content areas (~4,000 sessions), ahead of destination pages for Palm Springs, New Jersey, and Orlando." },
-    { heading: "Gifting is a measurable, recurring demand signal", body: "Gift-certificate content appeared among the top 15 most-visited pages (~2,000 sessions), aligned with the November to January holiday period." },
+    { heading: "Search demand peaks in April at roughly 2.9x its June low", body: "Search demand for golf-instruction-related queries in the United States peaks in April and reaches its annual trough in June, a peak-to-trough ratio of approximately 2.9 to one - a recurring seasonal pattern rather than a directional trend, based on roughly 1.4 million impressions across the dataset window." },
+    { heading: "A secondary summer surge appears in July", body: "Among summer months, July produced the highest search-impression volume at approximately 128,000 - roughly 2.4 times the approximately 54,000 recorded in June - reflecting a second wave of consumer research as the outdoor season reaches its midpoint." },
+    { heading: "January shows a pronounced mid-winter rebound", body: "January registered approximately 118,000 search impressions, the highest of any winter month and above several spring and fall months, indicating an identifiable new-year research surge that runs counter to outdoor playing conditions." },
+    { heading: "Inquiry timing concentrates in the off-season", body: "Inbound inquiry activity is disproportionately concentrated outside peak search months: October through March collectively account for more than half of all indexed inquiry activity, with February and March together near the annual high." },
+    { heading: "Women's and senior instruction form a distinct query cluster", body: "Within the dataset's keyword footprint, searches oriented toward women's golf schools and golf instruction for seniors form a consistent, separate cluster of market demand, appearing among the most frequent intent-specific query themes alongside general golf-school and golf-academy terms." },
   ],
 
   sections: [
     {
       heading: "Seasonal demand in detail",
       paragraphs: [
-        "Web sessions rose from a June 2025 low of approximately 3,900 to the January 2026 peak of approximately 15,600, then sustained elevated volume through the March-April pre-season window before easing again toward a June 2026 reading of approximately 5,600.",
-        "A notable mid-summer divergence appears between browsing and intent. While July 2025 represented the peak inquiry month, August 2025 saw inquiry share decline approximately 36% from that peak even as web sessions remained above 9,400.",
+        "Search impressions for golf-instruction queries are not evenly distributed across the year. Volume concentrates in two windows: a primary spring surge centered on April, at approximately 156,000 impressions, and a secondary mid-winter rebound concentrated in January, at approximately 118,000. The June trough, at approximately 54,000, marks the point at which the pre-season research window has largely closed.",
+        "Inquiry timing amplifies rather than mirrors this shape. While search crests in spring, the inquiry index stays elevated across October, November, February, and March, indicating that a segment of the market reaches the inquiry stage through planning behavior that does not fully express itself in broad seasonal search.",
       ],
     },
     {
       heading: "The macroeconomic backdrop",
       paragraphs: [
-        "Demand held stable across a divergent macro environment. The S&P 500 rose approximately 24% over the window while University of Michigan consumer sentiment fell 11.9 points, from 61.7 in July 2025 to 49.8 in April 2026. The federal funds rate eased from 4.33% to approximately 3.63%, and unemployment held near 4.3 to 4.4 percent throughout.",
-        "That rising equities and falling sentiment moved in opposite directions while golf school demand tracked its seasonal calendar reinforces the category's apparent resilience. All relationships are coincident or contextual; no causation is asserted.",
+        "The study window coincided with a mixed environment for discretionary leisure spending. Disposable personal income rose approximately 3.3 percent and the S&P 500 advanced approximately 32.7 percent, while U.S. consumer sentiment (University of Michigan survey) declined approximately 4.6 percent and the personal saving rate fell sharply. The federal funds rate eased approximately 16 percent over the window.",
+        "These indicators are presented as standalone context. Correlating a single year of strongly seasonal demand against macroeconomic time series is not statistically sufficient to establish a relationship, and none is asserted; the seasonal cycle, not the macro backdrop, is the dominant structural force in the data.",
       ],
       table: {
-        caption: "Macroeconomic indicators across the observation window",
-        columns: ["Indicator", "Start", "End / low", "Move"],
+        caption: "Macroeconomic indicators across the observation window (context only)",
+        columns: ["Indicator", "Window change"],
         rows: [
-          ["S&P 500 (monthly)", "~6,030", "~7,474", "~ +24%"],
-          ["UMich consumer sentiment", "61.7 (Jul 2025)", "49.8 (Apr 2026)", "-11.9"],
-          ["Federal funds rate", "4.33%", "~3.63%", "-0.70 pt"],
-          ["U.S. unemployment", "~4.3%", "~4.4%", "Flat"],
+          ["S&P 500", "~ +32.7%"],
+          ["Disposable personal income", "~ +3.3%"],
+          ["UMich consumer sentiment", "~ -4.6%"],
+          ["Federal funds rate", "~ -16%"],
         ],
       },
     },
     {
       heading: "Industry implications",
       paragraphs: [
-        "The performance of women's instruction content suggests consumer appetite for gender-specific golf education is underserved relative to demonstrated demand. Providers that expand women-focused curriculum may find a receptive, self-identifying audience.",
-        "The concentration of inquiries in a single paid-search channel reflects the effectiveness of paid search but indicates structural dependence on one acquisition channel, a dependency that may carry cost-stability implications as 2026 election-year advertising competition intensifies in Q3 to Q4.",
+        "The consistent presence of women's and senior instruction queries suggests these are established, year-round demand segments within the broader adult golf-education market rather than occasional long-tail interest.",
+        "The gap between when search demand peaks (spring) and when inquiry activity is elevated (the preceding off-season) points to an extended consumer planning horizon - a market of deliberate, research-driven buyers rather than impulse purchasers.",
       ],
     },
   ],
 
   faqs: [
-    { question: "When is demand for golf school instruction highest in the United States?", answer: "Demand peaks in January. January 2026 generated approximately 15,600 web sessions, about four times the seasonal low, with a secondary inquiry peak in February to March and an additional planning peak in July." },
-    { question: "Is demand for golf instruction seasonal?", answer: "Yes. Demand follows a strong winter-to-spring pattern, with the December to April window holding the majority of high-intent activity; March and April 2026 together produced approximately 28,600 web sessions." },
-    { question: "When is demand for golf schools lowest?", answer: "In early summer. June 2025 recorded approximately 3,900 web sessions and June 2026 approximately 5,600." },
-    { question: "How do consumers discover and inquire about golf schools?", answer: "Web discovery is split across organic search (~26%), paid search (~21%), and paid social (~20%). Phone inquiries are far more concentrated: approximately 96% originate from Google Ads." },
-    { question: "Does summer web traffic convert into golf school inquiries?", answer: "Less effectively. Although August 2025 web sessions remained above 9,400, inquiry share fell approximately 36% from the July peak." },
-    { question: "Did the 2025-2026 economy affect golf school demand?", answer: "Demand remained broadly stable across a divergent backdrop: the S&P 500 rose ~24%, consumer sentiment fell 11.9 points, the federal funds rate eased to ~3.63%, and unemployment held near 4.3 to 4.4 percent. No causation is asserted." },
-    { question: "Which golf instruction segments are growing?", answer: "Women's instruction is a distinct, growing segment (top-five content, ~4,000 sessions), and gift-experience interest is measurable (~2,000 sessions)." },
-    { question: "How dependent is golf school inquiry volume on paid search?", answer: "Highly dependent: approximately 96% of phone inquiries originate from Google Ads, a concentration that may carry cost-stability implications as election-year ad competition intensifies in Q3 to Q4 2026." },
+    { question: "When is search demand for golf schools highest in the United States?", answer: "Demand peaks in April, with a secondary summer surge in July and August and an annual trough in June - a peak-to-trough ratio of approximately 2.9 to one, based on roughly 1.4 million search impressions." },
+    { question: "Do people search for golf instruction in the winter?", answer: "Yes. January recorded approximately 118,000 search impressions, the highest of any winter month, and inquiry activity is concentrated from October through March, which together account for more than half of annual indexed inquiry volume." },
+    { question: "Is there demand for women's and senior golf school programs specifically?", answer: "Yes. Within the dataset's keyword footprint, searches for women's golf schools and golf instruction for seniors form a consistent, separate cluster of market demand, appearing among the most frequent intent-specific query themes year-round." },
+    { question: "How far in advance do consumers research golf schools?", answer: "The data suggest an extended planning horizon: inquiry activity is elevated through the October-to-March off-season, indicating that a substantial share of consumers research and initiate contact well ahead of their intended instruction dates." },
+    { question: "What was the economic backdrop during the study window?", answer: "Mixed: disposable personal income rose ~3.3 percent and the S&P 500 advanced ~32.7 percent, while consumer sentiment (University of Michigan survey) fell ~4.6 percent and the personal saving rate dropped sharply. These are presented as context; no causal link to demand is asserted." },
   ],
 
   methodology: [
-    "This research draws on first-party digital data collected by Bird Golf, a U.S. national golf instruction provider. Web engagement data spans approximately 365 days and encompasses several hundred thousand sessions measured via Google Analytics. Inbound inquiry data was aggregated via CallRail and is expressed as share percentages and relative indices rather than absolute counts.",
-    "External context was drawn from public datasets: consumer sentiment and unemployment via FRED; the 30-year mortgage rate and federal funds rate via FRED; the S&P 500 monthly close via S&P Dow Jones Indices; and national composite weather via Open-Meteo. Correlations are coincident or contextual; no causal relationships are asserted.",
-    "Limitations. Web data reflects national-scale engagement and does not isolate geographic sub-markets. Inquiry data is expressed in share and index form only. Sentiment and unemployment figures are national averages. Findings represent observed patterns within this dataset and observation window.",
+    "This report is published by Bird Golf, which operates as the researcher for this study. Search demand signals were derived from Google Search Console, encompassing approximately 1.4 million impressions logged against golf-instruction-related queries for which the analyzed property appeared in U.S. results. A Search Console impression is recorded when a result appears on a loaded results page for a real query, regardless of position or whether the user scrolled; impressions are treated as a directional proxy for market search demand, not a measure of publisher visibility, and are bounded by the dataset's keyword footprint rather than a census of all U.S. search volume.",
+    "Web engagement data were drawn from Google Analytics, covering approximately 130,000 sessions over the same window, and are used only as an approximate dataset-scale indicator; acquisition-channel composition is not reported. Inbound inquiry signals were drawn from CallRail and are expressed exclusively as a relative monthly index and each month's share of annual inquiry activity; absolute counts, conversion rates, and channel or source attribution are not reported. Macroeconomic context was sourced from FRED and weather from Open-Meteo; window-over-window changes were computed deterministically and used as context only.",
+    "Limitations. This study reflects a single twelve-month window and describes seasonal structure within it; it does not establish multi-year trend direction. Search-impression data are bounded by the analyzed property's keyword footprint and do not capture the full universe of U.S. golf-instruction search demand. Inquiry data reflect relative timing only and cannot be used to estimate market size or conversion. Macroeconomic and weather data are national aggregates presented as backdrop; no causal relationship with the demand curve is claimed.",
   ],
 
   dataSources: [
-    "Google Analytics - first-party web sessions, channel attribution, and top content (365 days ending June 2026).",
-    "CallRail - first-party inbound inquiry source share, answer rate, and first-time-caller share.",
-    "FRED - University of Michigan Consumer Sentiment (UMCSENT) and U.S. Unemployment Rate (UNRATE).",
-    "FRED - 30-Year Fixed Mortgage Rate (MORTGAGE30US) and Federal Funds Effective Rate (FEDFUNDS).",
-    "S&P Dow Jones Indices (via FRED) - S&P 500 monthly close.",
-    "Open-Meteo - national composite monthly weather, used for seasonal context.",
+    "Google Search Console - query-level search demand for the analysis window.",
+    "Google Analytics - aggregate website session volume for the analysis window.",
+    "CallRail - inbound inquiry timing, as a monthly seasonality index.",
+    "FRED (Federal Reserve Economic Data) - macroeconomic indicators for the same window.",
+    "Open-Meteo - national composite weather observations, used for seasonal context.",
   ],
 
   keywords: [
     "golf school demand", "golf instruction", "golf lessons", "seasonal demand",
-    "women's golf instruction", "golf industry trends", "golf marketing",
+    "women's golf instruction", "golf industry trends", "golf academy",
   ],
   about: [
-    "Golf school enrollment", "Golf instruction demand", "Seasonal consumer demand",
+    "Golf school search demand", "Golf instruction demand", "Seasonal consumer demand",
     "Golf industry trends", "Women's golf instruction",
   ],
   abstract:
-    "Across the 13 months ending June 2026, U.S. golf school enrollment demand peaked in January (~15,600 web sessions, roughly four times the seasonal low), concentrated high-intent activity in the December to April window, drew ~96% of phone inquiries from Google Ads, surfaced a growing women's-instruction segment, and remained stable despite an 11.9-point decline in consumer sentiment.",
+    "Across the twelve months ending June 2026, U.S. search demand for golf instruction peaked in April at roughly 2.9 times its June low, showed secondary surges in July and January, and concentrated inbound inquiry timing across the October-to-March off-season, against a mixed macroeconomic backdrop with no causal link asserted.",
 
-  sourceStampEnabled: false,
+  sourceStampEnabled: true,
 };
