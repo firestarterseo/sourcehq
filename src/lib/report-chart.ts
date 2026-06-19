@@ -167,7 +167,7 @@ export function buildComparisonChart(title: string, series: ComparisonSeries[]):
   const minV = Math.min(100, ...allVals);
   const maxV = Math.max(100, ...allVals);
   const padTop = (maxV - minV) * 0.1 || 10;
-  const yMin = Math.floor((minV - padTop) / 10) * 10;
+  const yMin = Math.max(0, Math.floor((minV - padTop) / 10) * 10); // indexed values are never negative
   const yMax = Math.ceil((maxV + padTop) / 10) * 10;
 
   const W = 720, H = 340;
@@ -254,4 +254,5 @@ export function buildComparisonChart(title: string, series: ComparisonSeries[]):
   const rows = months.map((m, i) => ({ month: m, values: indexed.map(s => s.idx[i]) }));
   return { title, svg, seriesLabels: indexed.map(s => s.label), rows };
 }
+
 
