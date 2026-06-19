@@ -33,6 +33,12 @@ const CSS = `
 .srv ul{padding-left:20px;margin:0;}
 .srv li{margin-bottom:6px;font-family:Inter,sans-serif;font-size:14px;color:#5C6158;}
 .srv .foot{font-family:Inter,sans-serif;font-size:11.5px;color:#5C6158;border-top:1px solid #E2DED3;margin-top:40px;padding-top:18px;}
+.srv .toc{background:#fff;border:1px solid #E2DED3;padding:18px 22px;margin:28px 0;}
+.srv .toc .lab{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#B0832E;font-weight:600;margin:0 0 12px;}
+.srv .toc ol{list-style:none;margin:0;padding:0;}
+.srv .toc li{display:flex;gap:12px;align-items:baseline;padding:6px 0;border-bottom:1px solid #F1EEE4;font-family:Inter,sans-serif;font-size:14px;color:#1A1A17;}
+.srv .toc li:last-child{border-bottom:none;}
+.srv .toc .ix{font-size:11px;font-weight:600;color:#B0832E;min-width:20px;}
 .srv .strip{display:grid;gap:10px;margin:30px 0;}
 .srv .strip .cell{background:#fff;border:1px solid #E2DED3;padding:15px 14px;}
 .srv .strip .cell .n{font-family:Fraunces,serif;font-weight:600;font-size:21px;color:#1F4D3A;line-height:1.15;}
@@ -58,6 +64,26 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
         <b>Coverage:</b> {report.coverage}
       </p>
       <blockquote><p>{report.citation}</p></blockquote>
+
+      {(() => {
+        const items: string[] = [];
+        if (report.executiveSummary?.length) items.push("Executive summary");
+        if (report.findings?.length) items.push("Key findings");
+        report.sections?.forEach((s) => { if (s.heading) items.push(s.heading); });
+        if (report.faqs?.length) items.push("Frequently asked questions");
+        if (report.methodology?.length) items.push("Methodology");
+        if (report.dataSources?.length) items.push("Data sources");
+        return items.length >= 4 ? (
+          <nav className="toc">
+            <p className="lab">Contents</p>
+            <ol>
+              {items.map((t, i) => (
+                <li key={i}><span className="ix">{String(i + 1).padStart(2, "0")}</span><span>{t}</span></li>
+              ))}
+            </ol>
+          </nav>
+        ) : null;
+      })()}
 
       {report.keyStats?.length > 0 && (
         <div className="strip" style={{ gridTemplateColumns: `repeat(${Math.min(report.keyStats.length, 4)}, 1fr)` }}>
