@@ -22,7 +22,10 @@ const CSS = `
 .srv .stats .row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #E2DED3;}
 .srv .stats .row.last{border-bottom:none;}
 .srv .stats .v{font-family:Inter,sans-serif;font-weight:700;color:#1F4D3A;text-align:right;white-space:nowrap;}
-.srv .finding{border-left:3px solid #1F4D3A;padding-left:18px;margin:20px 0;}
+.srv .finding{position:relative;background:#fff;border:1px solid #E2DED3;border-left:3px solid #1F4D3A;padding:15px 18px 15px 46px;margin:13px 0;}
+.srv .finding .num{position:absolute;left:13px;top:15px;font-family:Inter,sans-serif;font-weight:700;font-size:12px;color:#fff;background:#1F4D3A;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.srv .finding h3{margin:0 0 4px;}
+.srv .finding p{margin:0;}
 .srv table{width:100%;border-collapse:collapse;margin:22px 0;font-family:Inter,sans-serif;font-size:13px;}
 .srv th,.srv td{text-align:left;padding:9px 11px;border-bottom:1px solid #E2DED3;}
 .srv th{color:#5C6158;font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
@@ -30,6 +33,13 @@ const CSS = `
 .srv ul{padding-left:20px;margin:0;}
 .srv li{margin-bottom:6px;font-family:Inter,sans-serif;font-size:14px;color:#5C6158;}
 .srv .foot{font-family:Inter,sans-serif;font-size:11.5px;color:#5C6158;border-top:1px solid #E2DED3;margin-top:40px;padding-top:18px;}
+.srv .strip{display:grid;gap:10px;margin:30px 0;}
+.srv .strip .cell{background:#fff;border:1px solid #E2DED3;padding:15px 14px;}
+.srv .strip .cell .n{font-family:Fraunces,serif;font-weight:600;font-size:21px;color:#1F4D3A;line-height:1.15;}
+.srv .strip .cell .l{font-family:Inter,sans-serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#5C6158;margin-top:6px;}
+.srv .limits{background:#fff;border:1px solid #E2DED3;border-left:4px solid #B0832E;padding:14px 18px;margin:18px 0;}
+.srv .limits p{margin:0;font-size:15px;color:#5C6158;}
+@media(max-width:560px){.srv .strip{grid-template-columns:1fr 1fr !important;}}
 @media(max-width:560px){.srv{padding:32px 20px;}.srv h1{font-size:24px;}}
 `;
 
@@ -50,12 +60,11 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
       <blockquote><p>{report.citation}</p></blockquote>
 
       {report.keyStats?.length > 0 && (
-        <div className="stats">
-          <p className="lab">Key statistics</p>
+        <div className="strip" style={{ gridTemplateColumns: `repeat(${Math.min(report.keyStats.length, 4)}, 1fr)` }}>
           {report.keyStats.map((s, i) => (
-            <div className={"row" + (i === report.keyStats.length - 1 ? " last" : "")} key={i}>
-              <span>{s.label}</span>
-              <span className="v">{s.value}</span>
+            <div className="cell" key={i}>
+              <div className="n">{s.value}</div>
+              <div className="l">{s.label}</div>
             </div>
           ))}
         </div>
@@ -73,6 +82,7 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
           <h2>Findings</h2>
           {report.findings.map((f, i) => (
             <div className="finding" key={i}>
+              <span className="num">{i + 1}</span>
               <h3>{f.heading}</h3>
               <p>{f.body}</p>
             </div>
@@ -115,7 +125,11 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
       {report.methodology?.length > 0 && (
         <>
           <h2>Methodology</h2>
-          {report.methodology.map((p, i) => <p key={i}>{p}</p>)}
+          {report.methodology.map((p, i) =>
+            /^limitations[.:]/i.test(p.trim())
+              ? <div className="limits" key={i}><p>{p}</p></div>
+              : <p key={i}>{p}</p>
+          )}
         </>
       )}
 
