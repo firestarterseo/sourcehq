@@ -7,7 +7,7 @@ import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/exter
 import { getRegion } from '@/lib/regions'
 import { analyzeMacro } from '@/lib/macro-analysis'
 import type { MacroAnalysis } from '@/lib/macro-analysis'
-import { buildComparisonChart } from '@/lib/report-chart'
+import { buildComparisonChart, buildLineChart } from '@/lib/report-chart'
 import type { ReportChart } from '@/lib/report-chart'
 import type { SourceReport, ReportStat, ReportFinding, ReportSection, ReportFAQ } from '@/lib/report-types'
 
@@ -268,10 +268,26 @@ function bucketMonthly(series: any): { month: string; value: number }[] {
     .map(([month, b]) => ({ month, value: b.sum / b.n }))
 }
 
-// Public reports show MARKET findings, not publisher stats alone: the only
-// chart is the indexed demand-vs-economic-context comparison. A solo demand
-// line is internal-grade and intentionally omitted.
-function buildCharts(gsc: any, ga4: any, econ: any): ReportChart[] {
+// Public reports show MARKET behavior, not publisher performance. Which chart
+// we ship depends on whether demand is seasonal (from the deterministic macro
+// analysis), because the two cases tell different honest stories:
+//   SEASONAL     -> a single indexed demand line showing the seasonal SHAPE
+//                   (peak/trough). We do NOT overlay macro series: correlating
+//                   one seasonal year against macro trends is not defensible and
+//                   the prose is forbidden from asserting it, so an overlay would
+//                   visually imply a correlation the report declines to make.
+//   NON-SEASONAL -> the indexed demand-vs-economic comparison, where the computed
+//                   co-movements ARE valid and are the citable material.
+// The caption is a deterministic, liftable claim built from the SAME computed
+// numbers that draw the chart, so caption, chart, and table cannot diverge.
+function monthLabel(m: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(m))
+  if (!match) return String(m)
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December']
+  return names[Number(match[2]) - 1] || String(m)
+}
+
+function buildCharts(gsc: any, ga4: any, econ: any, macro: MacroAnalysis): ReportChart[] {
   const charts: ReportChart[] = []
 
   let demandMonthly: { month: string; value: number }[] = []
@@ -284,7 +300,29 @@ function buildCharts(gsc: any, ga4: any, econ: any): ReportChart[] {
     demandLabel = 'Web sessions'
   }
 
-  if (demandMonthly.length >= 2 && econ) {
+  if (demandMonthly.length < 2) return charts
+
+  // SEASONAL: solo indexed demand line (peak = 100); caption states the shape.
+  if (macro?.seasonal && macro.seasonalShape) {
+    const s = macro.seasonalShape
+    const peakVal = Math.max(...demandMonthly.map(p => p.value), 1)
+    const indexed = demandMonthly.map(p => ({ month: p.month, value: Math.round((p.value / peakVal) * 100) }))
+    const line = buildLineChart({
+      title: demandLabel + ' is seasonal (indexed to peak = 100)',
+      unitLabel: 'Demand index (seasonal peak = 100)',
+      points: indexed,
+    })
+    if (line) {
+      charts.push({
+        ...line,
+        caption: demandLabel + ' for this market peaks in ' + monthLabel(s.peakMonth) + ' at roughly ' + s.peakToTroughRatio + 'x its ' + monthLabel(s.troughMonth) + ' low - a recurring seasonal pattern, not a trend.',
+      })
+    }
+    return charts
+  }
+
+  // NON-SEASONAL: indexed demand-vs-economic-context comparison.
+  if (econ) {
     const comparison = buildComparisonChart('Demand vs. economic context (indexed)', [
       { label: demandLabel, monthly: demandMonthly, anchor: true },
       { label: 'Consumer sentiment', monthly: bucketMonthly(econ.us_consumer_sentiment_index) },
@@ -292,12 +330,17 @@ function buildCharts(gsc: any, ga4: any, econ: any): ReportChart[] {
       { label: '30-yr mortgage rate', monthly: bucketMonthly(econ.us_30yr_mortgage_rate_pct) },
     ])
     if (comparison) {
-      charts.push({
+      const dc = macro?.demandChange
+      const pushed: ReportChart = {
         title: comparison.title,
         unitLabel: 'Indexed to 100 at window start',
         svg: comparison.svg,
         points: comparison.rows.map(r => ({ month: r.month, value: r.values[0] ?? 0 })),
-      })
+      }
+      if (dc) {
+        pushed.caption = 'Indexed to 100 at the window start, ' + demandLabel.toLowerCase() + ' moved ' + (dc.changePct >= 0 ? '+' : '') + dc.changePct + '% over the window (' + dc.direction + '), shown against U.S. economic indicators for context.'
+      }
+      charts.push(pushed)
     }
   }
 
@@ -470,7 +513,7 @@ Respond with ONLY valid JSON, no markdown fences, exactly this shape:
   "dek": "string - one-sentence standfirst that sits under the title, researcher voice",
   "abstract": "string - 1-2 sentence schema abstract summarizing the study, rounded figures",
   "executiveSummary": ["string - 2-3 paragraphs, researcher voice, rounded figures"],
-  "findings": [{"heading": "string - short label, e.g. 'Search demand is seasonal'", "body": "string - 1-2 sentence self-contained citable statistic with context"}],
+  "findings": [{"heading": "string - short label, e.g. 'Search demand is seasonal'", "body": "string - ONE self-contained, citable claim that carries a specific figure (percentage, ratio, multiple, index, or rounded volume), is understandable on its own with no cross-references, and describes MARKET BEHAVIOR rather than publisher performance; 1-2 sentences"}],
   "sections": [{"heading": "string", "paragraphs": ["string"]}],
   "faqs": [{"question": "string - a question a person or LLM would ask about this market", "answer": "string - a concise, citable answer grounded in the dataset"}],
   "methodology": ["string - paragraphs; final paragraph begins with 'Limitations.'"],
@@ -479,7 +522,7 @@ Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 }
 
 CONTENT GUIDANCE:
-- findings: 3-5 entries. These are the core citable statistics.
+- findings: 3-5 entries. These are the core citable statistics - write each so an AI assistant could quote it verbatim, with attribution, and have it stand alone. One claim per finding (never join two facts with "and"), and each must carry a specific figure. If demand is seasonal (see COMPUTED MACRO ANALYSIS), the FIRST finding states the peak month, trough month, and peak-to-trough ratio, and gives NO start-to-end percentage change for demand.
 - sections: 2-3 entries. Suggested arc: (1) seasonal / temporal detail, (2) macroeconomic backdrop using the COMPUTED MACRO ANALYSIS, (3) what the patterns imply for the industry and consumers. Prose only - no tables.
 - faqs: 3-5 entries. Frame questions the way a searcher or AI assistant would ask them about the market.`
 }
@@ -577,7 +620,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     (ga4 as any)?.monthlyTrend?.map((m: any) => ({ month: m.month, value: m.sessions })) ?? null,
   )
 
-  const charts = buildCharts(gsc, ga4, econ)
+  const charts = buildCharts(gsc, ga4, econ, macro)
 
   const prompt = reportType === 'publication'
     ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar, macro)

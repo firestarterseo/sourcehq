@@ -20,6 +20,7 @@ export interface ReportChart {
   unitLabel: string;
   svg: string;             // self-contained SVG markup
   points: ChartPoint[];    // kept so the export can render an adjacent data table
+  caption?: string;        // liftable, deterministic claim shown as the figcaption
 }
 
 // Multi-series indexed comparison chart.

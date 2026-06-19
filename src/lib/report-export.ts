@@ -47,7 +47,7 @@ function renderCharts(charts: ReportChart[]): string {
       // are always machine-readable in the export. The in-app preview hides the
       // in-figure table via CSS (.srcv figure table{display:none}) for a clean
       // on-screen chart, while the exported HTML keeps it for LLMs.
-      return `<figure>\n${ch.svg}\n<figcaption>${esc(ch.title)}</figcaption>\n${table}\n</figure>`;
+      return `<figure>\n${ch.svg}\n<figcaption>${esc(ch.caption || ch.title)}</figcaption>\n${table}\n</figure>`;
     })
     .join('\n\n');
 }
