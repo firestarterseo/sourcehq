@@ -125,11 +125,11 @@ export function renderContentHtml(report: SourceReport): string {
   }
 
   parts.push('<hr>');
-  const stamp = report.sourceStampEnabled
-    ? ` Researched with the SOURCE&trade; method &mdash; SOURCED NOT CITED&trade;.`
-    : '';
+  // Published asset stays neutral: no agency-method branding on the client's
+  // domain, where it would undercut the third-party-research framing. The
+  // SOURCE stamp remains on the in-app preview/PDF (SourceReportView.tsx).
   parts.push(
-    `<p><em>Published by ${esc(report.publisher)}. Free to cite with attribution.${stamp}</em></p>`
+    `<p><em>Published by ${esc(report.publisher)}. Free to cite with attribution.</em></p>`
   );
 
   return parts.join('\n\n') + '\n';

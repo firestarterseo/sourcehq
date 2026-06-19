@@ -242,8 +242,8 @@ function buildKeyStats(gsc: any, ga4: any, _calls: any, windowLabel: string): Re
 function buildDataSources(gsc: any, ga4: any, calls: any, econ: any, weather: any): string[] {
   const out: string[] = []
   if (gsc) out.push('Google Search Console - query- and page-level search demand for the analysis window.')
-  if (ga4) out.push('Google Analytics - session, channel, and landing-page engagement.')
-  if (calls) out.push('CallRail - inbound inquiry distribution, aggregated to channel shares and answer rates.')
+  if (ga4) out.push('Google Analytics - aggregate website session volume for the analysis window.')
+  if (calls) out.push('CallRail - inbound inquiry timing, as a monthly seasonality index.')
   if (econ) out.push('FRED (Federal Reserve Economic Data) - macroeconomic indicators for the same window.')
   if (weather) out.push('Open-Meteo - regional weather observations for the market metro.')
   return out
