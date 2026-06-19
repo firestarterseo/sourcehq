@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import type { SourceReport } from '@/lib/report-types'
 import { renderContentHtml, renderSchemaScriptTag, renderSchemaJson } from '@/lib/report-export'
+import SourceReportView from '@/components/SourceReportView'
 
 interface InternalContent {
   title?: string
@@ -37,27 +38,7 @@ const DERIVATIVES = [
 const CARD = { background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '16px' }
 const H3 = { fontFamily: 'Outfit, sans-serif', fontSize: '15px', fontWeight: 600, color: '#0D1B3E', marginBottom: '14px' } as const
 
-// Minimal neutral styling for the in-app preview ONLY. This never travels with
-// the copied HTML - it just makes the naked semantic fragment readable on screen,
-// honestly previewing how a themed host site will render it.
-const PREVIEW_CSS = `
-.srcv{max-width:720px;color:#1f2328;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.65;}
-.srcv h1{font-size:28px;line-height:1.2;margin:0 0 12px;font-weight:600;}
-.srcv h2{font-size:21px;margin:34px 0 10px;font-weight:600;}
-.srcv h3{font-size:16px;margin:20px 0 6px;font-weight:600;}
-.srcv p{margin:0 0 15px;}
-.srcv ul{padding-left:22px;margin:0 0 15px;}
-.srcv li{margin-bottom:6px;}
-.srcv table{width:100%;border-collapse:collapse;margin:18px 0;font-size:14px;}
-.srcv th,.srcv td{text-align:left;padding:8px 11px;border:1px solid #d8dade;}
-.srcv th{background:#f4f5f6;}
-.srcv caption{text-align:left;font-size:13px;color:#5c6168;margin-bottom:6px;}
-.srcv blockquote{border-left:3px solid #c9ccd1;margin:18px 0;padding:6px 16px;color:#5c6168;}
-.srcv hr{border:none;border-top:1px solid #e2e4e7;margin:32px 0;}
-.srcv em{color:#5c6168;}
-.srcv figure{margin:24px 0;}
-.srcv figure table{display:none;}
-`
+// (Styled in-app rendering now lives in SourceReportView; the style-free export still ships via Copy/Download.)
 
 function slugify(s: string): string {
   return (s || 'report')
@@ -226,12 +207,9 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
                 <span style={{ display: 'inline-block', fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '20px', background: '#EDE9FE', color: '#6D28D9' }}>Citable Publication</span>
-                <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Preview reflects the exported HTML. Your site styles fonts &amp; colors.</span>
+                <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Styled in-app view. Use Copy / Download above for the blog-ready HTML and schema.</span>
               </div>
-              <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '40px 44px' }}>
-                <style dangerouslySetInnerHTML={{ __html: PREVIEW_CSS }} />
-                <div className="srcv" dangerouslySetInnerHTML={{ __html: contentHtml }} />
-              </div>
+              <SourceReportView report={c as SourceReport} />
 
               <div style={{ ...CARD, marginTop: '16px' }}>
                 <h3 style={{ ...H3, marginBottom: '4px' }}>Repurpose</h3>

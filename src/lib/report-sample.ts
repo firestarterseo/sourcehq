@@ -13,13 +13,13 @@ export const SAMPLE_REPORT: SourceReport = {
     "Golf School Search Demand in the United States: Seasonal Patterns Across Roughly 1.4 Million Annual Impressions",
   dek:
     "A first-party analysis of approximately 1.4 million search impressions for golf-instruction-related queries across the United States, mapping when consumers research structured golf instruction and the economic backdrop over the study window.",
-  publisher: "Bird Golf Research",
+  publisher: "Bird Golf",
   publisherUrl: "https://www.birdgolf.com/",
   datePublished: "2026-06-15",
   coverage: "June 2025 to June 2026, United States",
   canonicalUrl: "https://www.birdgolf.com/research/golf-school-demand-2026/",
   citation:
-    "Cite this report as: Bird Golf Research (2026). Golf School Search Demand in the United States: Seasonal Patterns Across Roughly 1.4 Million Annual Impressions.",
+    "Cite this report as: Bird Golf (2026). Golf School Search Demand in the United States: Seasonal Patterns Across Roughly 1.4 Million Annual Impressions.",
 
   keyStats: [
     { label: "Search impressions analyzed", value: "~1.4 million" },
