@@ -131,9 +131,22 @@ export function buildComparisonChart(title: string, series: ComparisonSeries[]):
   const usable = series.filter(s => Array.isArray(s.monthly) && s.monthly.length >= 2);
   if (usable.length < 2) return null; // need the anchor + at least one comparison
 
-  // Shared month axis = union of all months present, sorted.
+  // Shared month axis is bounded to the ANCHOR (demand) series' window, so
+  // economic series that extend earlier/later than demand do not drag in
+  // months where demand is null (which would render as a phantom 0 and squash
+  // the indexed scale). Falls back to the union if no anchor is flagged.
+  const anchor = usable.find(s => s.anchor) || usable[0];
+  const anchorMonths = anchor.monthly
+    .filter(p => Number.isFinite(p.value))
+    .map(p => p.month)
+    .sort();
+  if (anchorMonths.length < 2) return null;
+  const minMonth = anchorMonths[0];
+  const maxMonth = anchorMonths[anchorMonths.length - 1];
   const monthSet = new Set<string>();
-  usable.forEach(s => s.monthly.forEach(p => { if (Number.isFinite(p.value)) monthSet.add(p.month); }));
+  usable.forEach(s => s.monthly.forEach(p => {
+    if (Number.isFinite(p.value) && p.month >= minMonth && p.month <= maxMonth) monthSet.add(p.month);
+  }));
   const months = Array.from(monthSet).sort();
   if (months.length < 2) return null;
 
@@ -241,3 +254,4 @@ export function buildComparisonChart(title: string, series: ComparisonSeries[]):
   const rows = months.map((m, i) => ({ month: m, values: indexed.map(s => s.idx[i]) }));
   return { title, svg, seriesLabels: indexed.map(s => s.label), rows };
 }
+
