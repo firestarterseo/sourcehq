@@ -55,6 +55,8 @@ const PREVIEW_CSS = `
 .srcv blockquote{border-left:3px solid #c9ccd1;margin:18px 0;padding:6px 16px;color:#5c6168;}
 .srcv hr{border:none;border-top:1px solid #e2e4e7;margin:32px 0;}
 .srcv em{color:#5c6168;}
+.srcv figure{margin:24px 0;}
+.srcv figure table{display:none;}
 `
 
 function slugify(s: string): string {
@@ -282,3 +284,4 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     </div>
   )
 }
+

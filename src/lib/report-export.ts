@@ -43,8 +43,11 @@ function renderCharts(charts: ReportChart[]): string {
         .join('\n');
       const table =
         `<table>\n  <caption>${esc(ch.title)} - data</caption>\n  <thead><tr><th>Month</th><th>${esc(ch.unitLabel)}</th></tr></thead>\n  <tbody>\n${rows}\n  </tbody>\n</table>`;
-      // figure wraps the SVG; the table follows so the numbers are always readable.
-      return `<figure>\n${ch.svg}\n<figcaption>${esc(ch.title)}</figcaption>\n</figure>\n${table}`;
+      // figure groups the SVG, its caption, AND the data table so the numbers
+      // are always machine-readable in the export. The in-app preview hides the
+      // in-figure table via CSS (.srcv figure table{display:none}) for a clean
+      // on-screen chart, while the exported HTML keeps it for LLMs.
+      return `<figure>\n${ch.svg}\n<figcaption>${esc(ch.title)}</figcaption>\n${table}\n</figure>`;
     })
     .join('\n\n');
 }
@@ -178,3 +181,4 @@ export function renderSchemaJson(report: SourceReport): string {
 export function renderSchemaScriptTag(report: SourceReport): string {
   return '<script type="application/ld+json">\n' + renderSchemaJson(report) + '\n</script>';
 }
+
