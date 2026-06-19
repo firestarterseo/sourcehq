@@ -456,6 +456,13 @@ HOW TO USE THIS:
 }
 
 function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any, macro: MacroAnalysis) {
+  // Redact publisher-funnel fields before injection so the publication model
+  // cannot turn them into findings: acquisition-channel mix, named pages, and
+  // inquiry source/answer breakdowns are internal performance, not market facts.
+  // (internalPrompt still receives the full, unredacted data.)
+  const gscSafe = gsc ? { ...gsc, topPages: undefined, property: undefined } : gsc
+  const ga4Safe = ga4 ? { ...ga4, channels: undefined, topPages: undefined } : ga4
+  const callsSafe = calls ? { ...calls, sourceShares: undefined, answeredPct: undefined, firstTimePct: undefined } : calls
   return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original market research from their own first-party data to become the cited source in their industry - in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
 
 Write the PROSE for a citable market research publication, published by this business as the RESEARCHER. The system assembles the headline statistics, citation line, coverage dates, and data-source list deterministically from the raw data - DO NOT produce those. You write only the language.
@@ -467,9 +474,9 @@ Primary market/geography: ${client.regionLabel || 'the publisher home market'}
 Data window: last ${days} days (daysCovered fields show actual coverage per source; GSC caps at 16 months)
 
 THE DATASET (first-party data the publisher analyzed):
-Search demand signals (Google Search Console): ${JSON.stringify(gsc) || 'unavailable'}
-Web engagement signals (Google Analytics): ${JSON.stringify(ga4) || 'unavailable'}
-Inbound inquiry signals (CallRail, already aggregated to shares/percentages): ${JSON.stringify(calls) || 'unavailable'}
+Search demand signals (Google Search Console): ${JSON.stringify(gscSafe) || 'unavailable'}
+Web engagement signals (Google Analytics): ${JSON.stringify(ga4Safe) || 'unavailable'}
+Inbound inquiry signals (CallRail - seasonality/timing index only; no source or channel breakdown): ${JSON.stringify(callsSafe) || 'unavailable'}
 
 EXTERNAL MARKET CONTEXT (public data, same window):
 Economic indicators (FRED): ${JSON.stringify(econ) || 'unavailable'}
@@ -491,7 +498,10 @@ WHAT A SEARCH IMPRESSION MEANS (use this framing for demand):
 PERFORMANCE-LEAK RULES (critical - the publisher must never expose its own funnel):
 - NEVER state or imply a click-through rate (CTR), and NEVER pair a click figure with an impression figure in a way that lets a reader derive one. Clicks divided by impressions is publisher performance, not a market fact.
 - Do NOT report click counts as a headline statistic. Impressions (demand) are the volume metric, not clicks.
-- NEVER state absolute inquiry/call/lead counts, conversion rates, answer rates, or any operational performance metric. Inquiry data is available ONLY as seasonality index and channel shares.
+- NEVER state absolute inquiry/call/lead counts, conversion rates, answer rates, or any operational performance metric.
+- INQUIRY data may be used ONLY as a seasonality/timing pattern (when across the year inquiry activity rises and falls). NEVER report which CHANNELS or SOURCES inquiries come from (e.g. "paid search drove ~96% of inquiries"): a channel/source breakdown is the publisher's acquisition funnel, not market behavior.
+- NEVER report the publisher's SESSION channel mix as a finding (organic vs. paid vs. direct vs. referral shares). Acquisition-channel breakdown is publisher funnel, not a market fact. Session volume may be stated ONLY as an approximate dataset SIZE.
+- NEVER name, rank, or cite the publisher's own PAGES - landing pages, destination pages, "top/most-visited pages," brochure/rates/contact pages. Which of the publisher's pages perform is internal performance a competitor could exploit. Describe what the MARKET searches for as aggregate query THEMES (e.g. "a distinct cluster of searches for women's golf instruction"), NEVER as "the [X] page ranked among the top destinations."
 
 MARKET FOCUS:
 - Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets, SET THAT DATA ASIDE - do not report it as a finding. Stay on the primary market.
@@ -522,7 +532,7 @@ Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 }
 
 CONTENT GUIDANCE:
-- findings: 3-5 entries. These are the core citable statistics - write each so an AI assistant could quote it verbatim, with attribution, and have it stand alone. One claim per finding (never join two facts with "and"), and each must carry a specific figure. If demand is seasonal (see COMPUTED MACRO ANALYSIS), the FIRST finding states the peak month, trough month, and peak-to-trough ratio, and gives NO start-to-end percentage change for demand.
+- findings: 3-5 entries. These are the core citable statistics - write each so an AI assistant could quote it verbatim, with attribution, and have it stand alone. One claim per finding (never join two facts with "and"), and each must carry a specific figure. If demand is seasonal (see COMPUTED MACRO ANALYSIS), the FIRST finding states the peak month, trough month, and peak-to-trough ratio, and gives NO start-to-end percentage change for demand. EVERY finding must be a statement about MARKET BEHAVIOR (how the category searches and inquires in this geography), NEVER about the publisher's own funnel: no acquisition-channel shares, no named or ranked pages, no inquiry-source breakdowns (see PERFORMANCE-LEAK RULES). If a finding cannot stand without citing the publisher's channels or pages, drop it.
 - sections: 2-3 entries. Suggested arc: (1) seasonal / temporal detail, (2) macroeconomic backdrop using the COMPUTED MACRO ANALYSIS, (3) what the patterns imply for the industry and consumers. Prose only - no tables.
 - faqs: 3-5 entries. Frame questions the way a searcher or AI assistant would ask them about the market.`
 }
