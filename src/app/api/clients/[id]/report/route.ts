@@ -364,11 +364,35 @@ function macroComputedBlock(macro: MacroAnalysis): string {
     return 'COMPUTED MACRO ANALYSIS: no demand anchor available (neither search impressions nor sessions had enough monthly data), so do NOT assert any correlation between demand and economic indicators. Report economic figures as standalone context only.'
   }
   const demandLabel = macro.demandSource === 'gsc_impressions' ? 'search demand (search impressions)' : 'web sessions'
-  const dc = macro.demandChange
-  const demandLine = dc ? `Over the window, ${demandLabel} moved ${dc.changePct >= 0 ? '+' : ''}${dc.changePct}% (${dc.direction}).` : ''
   const changeLines = macro.seriesChanges
     .map(s => `- ${s.series}: ${s.changePct >= 0 ? '+' : ''}${s.changePct}% over the window (${s.direction}).`)
     .join('\n')
+
+  // Seasonal demand: characterize by SHAPE (peak/trough), never by an endpoint
+  // "% change over the window" (that is a measurement artifact when the window
+  // opens and closes on different phases of the cycle). Macro indicators are
+  // CONTEXT ONLY - do not assert they move with demand over a single seasonal year.
+  if (macro.seasonal && macro.seasonalShape) {
+    const s = macro.seasonalShape
+    return `COMPUTED MACRO ANALYSIS (deterministic - USE THESE NUMBERS, do not invent correlations):
+
+DEMAND IS STRONGLY SEASONAL. Characterize it by its seasonal SHAPE, NOT by any start-to-end change:
+- Peak month: ${s.peakMonth}. Trough month: ${s.troughMonth}. Peak-to-trough ratio: about ${s.peakToTroughRatio}x.
+- CRITICAL: Do NOT state a "demand rose/fell X% over the window" figure. Because the window opens and closes on different points of the seasonal cycle, an endpoint change is a measurement artifact and would misrepresent a healthy seasonal business as growing or collapsing. Frame demand as a recurring seasonal pattern (peak in ${s.peakMonth}, trough in ${s.troughMonth}), not as a trend.
+
+Economic indicators over the same window (CONTEXT ONLY):
+${changeLines}
+
+HOW TO USE THIS:
+- Lead with the SEASONAL STRUCTURE of demand (when it peaks, when it troughs, how pronounced the swing is). That is the report's core, defensible finding.
+- Present each economic indicator's window change as STANDALONE CONTEXT - state the figure as backdrop. Do NOT claim any economic indicator "moved with" or "moved inversely to" demand: correlating a seasonal demand curve against macro trends over a single year is not statistically meaningful, and asserting it would undermine the report's credibility.
+- You may note that the economic backdrop (e.g. rates, sentiment) is broadly supportive or cautionary for the category in general terms, but do not tie it to the demand curve's direction.
+- Keep LOCAL findings (seasonal search/inquiry pattern, weather) as the lead. National economic indicators are supporting context, never the headline.`
+  }
+
+  // Non-seasonal demand: endpoint change + computed co-movements are valid.
+  const dc = macro.demandChange
+  const demandLine = dc ? `Over the window, ${demandLabel} moved ${dc.changePct >= 0 ? '+' : ''}${dc.changePct}% (${dc.direction}).` : ''
   const coLines = macro.coMovements
     .map(c => `- ${c.note}`)
     .join('\n')
@@ -617,3 +641,4 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
+
