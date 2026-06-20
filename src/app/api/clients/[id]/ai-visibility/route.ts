@@ -133,7 +133,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .eq('client_id', id)
     .order('run_at', { ascending: true })
 
-  const { data: prompts } = await db
+  const { data: prompts, error: promptErr } = await db
     .from('ai_visibility_prompts')
     .select('id, prompt_text, intent_tag, active')
     .eq('client_id', id)
@@ -157,14 +157,14 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   const brand = String(client.name).trim()
   const domain = client.website ? String(client.website).replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase() : ''
 
-  const { data: prompts } = await db
+  const { data: prompts, error: promptErr } = await db
     .from('ai_visibility_prompts')
     .select('id, prompt_text')
     .eq('client_id', id)
     .eq('active', true)
 
   if (!prompts || prompts.length === 0) {
-    return NextResponse.json({ error: 'No active prompts for this client. Add prompts to ai_visibility_prompts first.' }, { status: 400 })
+    return NextResponse.json({ error: 'No active prompts found', debug: { clientIdUsed: id, promptCount: prompts ? prompts.length : null, dbError: promptErr ? promptErr.message : null } }, { status: 400 })
   }
 
   const engine = `perplexity:${PERPLEXITY_MODEL}`
@@ -207,4 +207,5 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   return NextResponse.json({ engine, overall, count: results.length, results })
 }
+
 
