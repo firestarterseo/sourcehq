@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import GenerateReportButton from '@/components/GenerateReportButton'
 import DataSourceTiles from '@/components/DataSourceTiles'
+import VisibilityTab from '@/components/VisibilityTab'
 import { REGIONS } from '@/lib/regions'
 import { Search, BarChart3, Phone, Link2 } from 'lucide-react'
 
@@ -71,6 +72,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', industry: '', website: '', region: '' })
+  const [activeTab, setActiveTab] = useState<'overview' | 'visibility' | 'content' | 'sources'>('visibility')
 
   const [reports, setReports] = useState<ReportRow[] | null>(null)
   const [confirmReportId, setConfirmReportId] = useState<string | null>(null)
@@ -280,8 +282,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        <div style={{ padding: '32px', maxWidth: '1080px' }}>
-          {error && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>}
+        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', display: 'flex', gap: '26px' }}>
+          {(['overview','visibility','content','sources'] as const).map(t => (
+            <button key={t} onClick={() => setActiveTab(t)} style={{ padding: '14px 2px', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', color: activeTab === t ? '#0D1B3E' : '#6B7280', fontWeight: activeTab === t ? '600' : '400', borderBottom: activeTab === t ? '2px solid #6D28D9' : '2px solid transparent' }}>{t === 'overview' ? 'Overview' : t === 'visibility' ? 'Visibility' : t === 'content' ? 'Content' : 'Data Sources'}</button>
+          ))}
+        </div>
+
+        <div style={{ padding: '32px', maxWidth: '1080px' }}>          {error && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>}
 
           {showDeleteConfirm && (
             <div style={{ background: '#FEF2F2', border: '0.5px solid #FECACA', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
@@ -310,6 +317,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
+          {activeTab === 'overview' && (
+            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '36px', textAlign: 'center' }}><p style={{ fontSize: '14px', color: '#6B7280', margin: 0 }}>Overview coming soon.</p></div>
+          )}
+
+          {activeTab === 'visibility' && <VisibilityTab clientId={id} />}
+
+          {activeTab === 'content' && (<>
           <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '20px 24px', marginBottom: '28px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
               <div>
@@ -354,6 +368,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
+          </>)}
+
+          {activeTab === 'sources' && (<>
           <DataSourceTiles
             clientId={id}
             googleConnected={googleConnected}
@@ -416,8 +433,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}><button onClick={handleConnectCallrail} disabled={callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim())} style={{ background: callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim()) ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{callrailSaving ? 'Connecting...' : 'Save & connect'}</button>{crConnected && <button onClick={handleDisconnectCallrail} style={{ background: 'transparent', color: '#DC2626', border: '0.5px solid #DC2626', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Disconnect</button>}</div>
             </div>
           )}
+          </>)}
         </div>
       </div>
     </div>
   )
 }
+
+
+
+
+
+
+
+
