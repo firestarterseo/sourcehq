@@ -7,6 +7,7 @@ export const maxDuration = 300
 
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
 const PERPLEXITY_MODEL = 'sonar-pro'
+const DATAFORSEO_API = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced'
 
 function adminClient() {
   return createClient(
@@ -33,7 +34,7 @@ async function getSession() {
   return supabase.auth.getSession()
 }
 
-// --- 1. Query Perplexity for one prompt ---
+// --- 1a. Query Perplexity for one prompt ---
 async function queryPerplexity(prompt: string) {
   const res = await fetch(PERPLEXITY_API, {
     method: 'POST',
@@ -55,6 +56,59 @@ async function queryPerplexity(prompt: string) {
   let citations: string[] = []
   if (Array.isArray(data?.citations)) citations = data.citations
   else if (Array.isArray(data?.search_results)) citations = data.search_results.map((s: any) => s.url || s.link).filter(Boolean)
+  return { answer, citations }
+}
+
+// --- 1b. Query Google AI Overviews via DataForSEO for one keyword ---
+async function queryAIOverview(keyword: string) {
+  const login = process.env.DATAFORSEO_LOGIN
+  const password = process.env.DATAFORSEO_PASSWORD
+  const cred = Buffer.from(`${login}:${password}`).toString('base64')
+  const res = await fetch(DATAFORSEO_API, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${cred}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify([{
+      keyword,
+      location_code: 2840,
+      language_code: 'en',
+      load_async_ai_overview: true,
+      expand_ai_overview: true,
+    }]),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`DataForSEO ${res.status}: ${body.slice(0, 200)}`)
+  }
+  const data = await res.json()
+  const items = data?.tasks?.[0]?.result?.[0]?.items ?? []
+  const aio = Array.isArray(items) ? items.find((it: any) => it?.type === 'ai_overview') : null
+  if (!aio) return { answer: '', citations: [] }
+
+  let answer = typeof aio.markdown === 'string' ? aio.markdown : ''
+  if (!answer && Array.isArray(aio.items)) {
+    answer = aio.items
+      .filter((el: any) => el?.type === 'ai_overview_element')
+      .map((el: any) => el.markdown || el.text || '')
+      .filter(Boolean)
+      .join('\n\n')
+  }
+
+  const refs: string[] = []
+  const collect = (arr: any) => {
+    if (Array.isArray(arr)) {
+      for (const r of arr) {
+        if (r?.url) refs.push(String(r.url))
+      }
+    }
+  }
+  collect(aio.references)
+  if (Array.isArray(aio.items)) {
+    for (const el of aio.items) collect(el?.references)
+  }
+  const citations = Array.from(new Set(refs))
   return { answer, citations }
 }
 
@@ -141,7 +195,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   return NextResponse.json({ runs: runs || [], prompts: prompts || [] })
 }
 
-// --- POST: execute a visibility run across all active prompts ---
+// --- POST: execute a visibility run across all active prompts and engines ---
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
@@ -167,46 +221,63 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: 'No active prompts for this client.' }, { status: 400 })
   }
 
-  const engine = `perplexity:${PERPLEXITY_MODEL}`
+  // Engine list. AI Overviews joins only when DataForSEO credentials are present.
+  const engines: { key: string; query: (prompt: string) => Promise<{ answer: string; citations: string[] }> }[] = [
+    { key: `perplexity:${PERPLEXITY_MODEL}`, query: queryPerplexity },
+  ]
+  if (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) {
+    engines.push({ key: 'google_ai_overviews:dataforseo', query: queryAIOverview })
+  }
+
   const results: any[] = []
 
   for (const p of prompts) {
-    try {
-      const { answer, citations } = await queryPerplexity(p.prompt_text)
-      const cited = domain ? citations.some((u) => String(u).toLowerCase().includes(domain)) : false
-      const parsed = await parseAnswer(brand, p.prompt_text, answer)
-      const score = scoreResult(parsed, cited)
+    for (const eng of engines) {
+      try {
+        const { answer, citations } = await eng.query(p.prompt_text)
+        const cited = domain ? citations.some((u) => String(u).toLowerCase().includes(domain)) : false
+        const parsed = answer
+          ? await parseAnswer(brand, p.prompt_text, answer)
+          : { brand_mentioned: false, answer_position: 0, total_named: 0, competitors: [], sentiment: 'n/a' }
+        const score = scoreResult(parsed, cited)
 
-      const { data: run } = await db
-        .from('ai_visibility_runs')
-        .insert({ client_id: id, prompt_id: p.id, engine, raw_answer: answer, citations, score })
-        .select('id')
-        .single()
+        const { data: run } = await db
+          .from('ai_visibility_runs')
+          .insert({ client_id: id, prompt_id: p.id, engine: eng.key, raw_answer: answer, citations, score })
+          .select('id')
+          .single()
 
-      if (run) {
-        await db.from('ai_visibility_mentions').insert({
-          run_id: run.id,
-          brand_mentioned: !!parsed.brand_mentioned,
-          brand_cited: cited,
-          answer_position: Number(parsed.answer_position) || 0,
-          total_named: Number(parsed.total_named) || 0,
-          competitors: parsed.competitors || [],
-          sentiment: parsed.sentiment || 'n/a',
-        })
+        if (run) {
+          await db.from('ai_visibility_mentions').insert({
+            run_id: run.id,
+            brand_mentioned: !!parsed.brand_mentioned,
+            brand_cited: cited,
+            answer_position: Number(parsed.answer_position) || 0,
+            total_named: Number(parsed.total_named) || 0,
+            competitors: parsed.competitors || [],
+            sentiment: parsed.sentiment || 'n/a',
+          })
+        }
+
+        results.push({ engine: eng.key, prompt: p.prompt_text, mentioned: !!parsed.brand_mentioned, cited, position: parsed.answer_position, score })
+      } catch (err: any) {
+        results.push({ engine: eng.key, prompt: p.prompt_text, error: err.message })
       }
-
-      results.push({ prompt: p.prompt_text, mentioned: !!parsed.brand_mentioned, cited, position: parsed.answer_position, score })
-    } catch (err: any) {
-      results.push({ prompt: p.prompt_text, error: err.message })
+      await new Promise((r) => setTimeout(r, 1200))
     }
-    await new Promise((r) => setTimeout(r, 1200))
   }
 
   const scored = results.filter((r) => !r.error)
   const overall = scored.length ? Math.round(scored.reduce((a, r) => a + r.score, 0) / scored.length) : 0
 
-  return NextResponse.json({ engine, overall, count: results.length, results })
+  const byEngine: Record<string, { overall: number; count: number }> = {}
+  for (const eng of engines) {
+    const rows = scored.filter((r) => r.engine === eng.key)
+    byEngine[eng.key] = {
+      overall: rows.length ? Math.round(rows.reduce((a, r) => a + r.score, 0) / rows.length) : 0,
+      count: rows.length,
+    }
+  }
+
+  return NextResponse.json({ overall, engines: byEngine, count: results.length, results })
 }
-
-
-
