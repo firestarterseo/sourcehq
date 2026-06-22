@@ -7,7 +7,8 @@ export const maxDuration = 300
 
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
 const PERPLEXITY_MODEL = 'sonar-pro'
-const DATAFORSEO_API = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced'
+const DATAFORSEO_POST = 'https://api.dataforseo.com/v3/serp/google/organic/task_post'
+const DATAFORSEO_GET = 'https://api.dataforseo.com/v3/serp/google/organic/task_get/advanced'
 
 function adminClient() {
   return createClient(
@@ -34,7 +35,9 @@ async function getSession() {
   return supabase.auth.getSession()
 }
 
-// --- 1a. Query Perplexity for one prompt ---
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// --- Perplexity: one prompt, returns answer + citations ---
 async function queryPerplexity(prompt: string) {
   const res = await fetch(PERPLEXITY_API, {
     method: 'POST',
@@ -59,31 +62,9 @@ async function queryPerplexity(prompt: string) {
   return { answer, citations }
 }
 
-// --- 1b. Query Google AI Overviews via DataForSEO for one keyword ---
-async function queryAIOverview(keyword: string) {
-  const login = process.env.DATAFORSEO_LOGIN
-  const password = process.env.DATAFORSEO_PASSWORD
-  const cred = Buffer.from(`${login}:${password}`).toString('base64')
-  const res = await fetch(DATAFORSEO_API, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${cred}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify([{
-      keyword,
-      location_code: 2840,
-      language_code: 'en',
-      load_async_ai_overview: true,
-      expand_ai_overview: true,
-    }]),
-  })
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`DataForSEO ${res.status}: ${body.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const items = data?.tasks?.[0]?.result?.[0]?.items ?? []
+// --- Extract the AI Overview answer + cited URLs from one task_get result ---
+function parseAIOResult(result: any): { answer: string; citations: string[] } {
+  const items = result?.items ?? []
   const aio = Array.isArray(items) ? items.find((it: any) => it?.type === 'ai_overview') : null
   if (!aio) return { answer: '', citations: [] }
 
@@ -108,11 +89,81 @@ async function queryAIOverview(keyword: string) {
   if (Array.isArray(aio.items)) {
     for (const el of aio.items) collect(el?.references)
   }
-  const citations = Array.from(new Set(refs))
-  return { answer, citations }
+  return { answer, citations: Array.from(new Set(refs)) }
 }
 
-// --- 2. Parse the answer with Claude (language extraction only) ---
+// --- AI Overviews via DataForSEO task-based: post all keywords, poll in parallel ---
+async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<Map<string, { answer: string; citations: string[] }>> {
+  const out = new Map<string, { answer: string; citations: string[] }>()
+  const login = process.env.DATAFORSEO_LOGIN!
+  const password = process.env.DATAFORSEO_PASSWORD!
+  const auth = `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}`
+
+  const kwToPrompt = new Map(prompts.map((p) => [p.prompt_text, p]))
+
+  // 1. Post every keyword in one request
+  const postBody = prompts.map((p) => ({
+    keyword: p.prompt_text,
+    location_code: 2840,
+    language_code: 'en',
+    load_async_ai_overview: true,
+    expand_ai_overview: true,
+    tag: 'sourcehq_aio',
+  }))
+  const postRes = await fetch(DATAFORSEO_POST, {
+    method: 'POST',
+    headers: { Authorization: auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify(postBody),
+  })
+  if (!postRes.ok) {
+    const body = await postRes.text()
+    throw new Error(`DataForSEO task_post ${postRes.status}: ${body.slice(0, 200)}`)
+  }
+  const postData = await postRes.json()
+  if (postData?.status_code !== 20000) {
+    throw new Error(`DataForSEO task_post status ${postData?.status_code}: ${postData?.status_message}`)
+  }
+
+  // Map each task id back to its prompt
+  const idToPrompt = new Map<string, { id: string; prompt_text: string }>()
+  for (const t of postData?.tasks ?? []) {
+    const kw = t?.data?.keyword
+    const prompt = kw ? kwToPrompt.get(kw) : null
+    if (t?.id && prompt) idToPrompt.set(t.id, prompt)
+  }
+  if (idToPrompt.size === 0) {
+    throw new Error('DataForSEO task_post returned no usable task ids')
+  }
+
+  // 2. Poll in rounds. Tasks finish in parallel server-side, so total wait is one task's time, not the sum.
+  const pending = new Set(idToPrompt.keys())
+  for (let round = 0; round < 25 && pending.size > 0; round++) {
+    await sleep(3000)
+    for (const id of Array.from(pending)) {
+      try {
+        const getRes = await fetch(`${DATAFORSEO_GET}/${id}`, { method: 'GET', headers: { Authorization: auth } })
+        if (!getRes.ok) continue
+        const getData = await getRes.json()
+        const task = getData?.tasks?.[0]
+        if (task?.status_code === 20000 && Array.isArray(task?.result) && task.result.length) {
+          const prompt = idToPrompt.get(id)!
+          out.set(prompt.id, parseAIOResult(task.result[0]))
+          pending.delete(id)
+        }
+      } catch {
+        // transient, retry next round
+      }
+    }
+  }
+  // Any task that never finished records as no-overview
+  for (const id of pending) {
+    const prompt = idToPrompt.get(id)!
+    out.set(prompt.id, { answer: '', citations: [] })
+  }
+  return out
+}
+
+// --- Parse an answer with Claude (language extraction only) ---
 async function parseAnswer(brand: string, prompt: string, answer: string) {
   const parsePrompt = `You are analyzing an AI search engine's answer to measure brand visibility.
 
@@ -163,7 +214,7 @@ Rules: brand_mentioned is true only if the TARGET BRAND is clearly named. answer
   }
 }
 
-// --- 3. Deterministic score (code, never the LLM) ---
+// --- Deterministic score (code, never the LLM) ---
 function scoreResult(parsed: any, cited: boolean) {
   let score = 0
   if (cited) score += 50
@@ -172,6 +223,41 @@ function scoreResult(parsed: any, cited: boolean) {
     score += Math.max(2, 20 - (parsed.answer_position - 1) * 4)
   }
   return Math.min(100, score)
+}
+
+// --- Parse, score, and write one run + mentions row ---
+async function recordRun(
+  db: any, clientId: string, promptId: string, promptText: string, engineKey: string,
+  brand: string, domain: string, answer: string, citations: string[], results: any[]
+) {
+  try {
+    const cited = domain ? citations.some((u) => String(u).toLowerCase().includes(domain)) : false
+    const parsed = answer
+      ? await parseAnswer(brand, promptText, answer)
+      : { brand_mentioned: false, answer_position: 0, total_named: 0, competitors: [], sentiment: 'n/a' }
+    const score = scoreResult(parsed, cited)
+
+    const { data: run } = await db
+      .from('ai_visibility_runs')
+      .insert({ client_id: clientId, prompt_id: promptId, engine: engineKey, raw_answer: answer, citations, score })
+      .select('id')
+      .single()
+
+    if (run) {
+      await db.from('ai_visibility_mentions').insert({
+        run_id: run.id,
+        brand_mentioned: !!parsed.brand_mentioned,
+        brand_cited: cited,
+        answer_position: Number(parsed.answer_position) || 0,
+        total_named: Number(parsed.total_named) || 0,
+        competitors: parsed.competitors || [],
+        sentiment: parsed.sentiment || 'n/a',
+      })
+    }
+    results.push({ engine: engineKey, prompt: promptText, mentioned: !!parsed.brand_mentioned, cited, position: parsed.answer_position, score })
+  } catch (err: any) {
+    results.push({ engine: engineKey, prompt: promptText, error: err.message })
+  }
 }
 
 // --- GET: return run history (trend series) ---
@@ -187,7 +273,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .eq('client_id', id)
     .order('run_at', { ascending: true })
 
-  const { data: prompts, error: promptErr } = await db
+  const { data: prompts } = await db
     .from('ai_visibility_prompts')
     .select('id, prompt_text, intent_tag, active')
     .eq('client_id', id)
@@ -221,49 +307,33 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: 'No active prompts for this client.' }, { status: 400 })
   }
 
-  // Engine list. AI Overviews joins only when DataForSEO credentials are present.
-  const engines: { key: string; query: (prompt: string) => Promise<{ answer: string; citations: string[] }> }[] = [
-    { key: `perplexity:${PERPLEXITY_MODEL}`, query: queryPerplexity },
-  ]
+  const results: any[] = []
+  let aioError: string | null = null
+
+  // Fetch all AI Overviews up front via the task-based endpoints. Only runs when DataForSEO creds exist.
+  let aioByPrompt: Map<string, { answer: string; citations: string[] }> | null = null
   if (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) {
-    engines.push({ key: 'google_ai_overviews:dataforseo', query: queryAIOverview })
+    try {
+      aioByPrompt = await fetchAIOverviews(prompts)
+    } catch (err: any) {
+      aioError = err.message
+      aioByPrompt = null
+    }
   }
 
-  const results: any[] = []
-
+  // One pass per prompt: Perplexity live, then AI Overviews from the prefetched map
   for (const p of prompts) {
-    for (const eng of engines) {
-      try {
-        const { answer, citations } = await eng.query(p.prompt_text)
-        const cited = domain ? citations.some((u) => String(u).toLowerCase().includes(domain)) : false
-        const parsed = answer
-          ? await parseAnswer(brand, p.prompt_text, answer)
-          : { brand_mentioned: false, answer_position: 0, total_named: 0, competitors: [], sentiment: 'n/a' }
-        const score = scoreResult(parsed, cited)
+    try {
+      const { answer, citations } = await queryPerplexity(p.prompt_text)
+      await recordRun(db, id, p.id, p.prompt_text, `perplexity:${PERPLEXITY_MODEL}`, brand, domain, answer, citations, results)
+    } catch (err: any) {
+      results.push({ engine: `perplexity:${PERPLEXITY_MODEL}`, prompt: p.prompt_text, error: err.message })
+    }
+    await sleep(1200)
 
-        const { data: run } = await db
-          .from('ai_visibility_runs')
-          .insert({ client_id: id, prompt_id: p.id, engine: eng.key, raw_answer: answer, citations, score })
-          .select('id')
-          .single()
-
-        if (run) {
-          await db.from('ai_visibility_mentions').insert({
-            run_id: run.id,
-            brand_mentioned: !!parsed.brand_mentioned,
-            brand_cited: cited,
-            answer_position: Number(parsed.answer_position) || 0,
-            total_named: Number(parsed.total_named) || 0,
-            competitors: parsed.competitors || [],
-            sentiment: parsed.sentiment || 'n/a',
-          })
-        }
-
-        results.push({ engine: eng.key, prompt: p.prompt_text, mentioned: !!parsed.brand_mentioned, cited, position: parsed.answer_position, score })
-      } catch (err: any) {
-        results.push({ engine: eng.key, prompt: p.prompt_text, error: err.message })
-      }
-      await new Promise((r) => setTimeout(r, 1200))
+    if (aioByPrompt) {
+      const aio = aioByPrompt.get(p.id) ?? { answer: '', citations: [] }
+      await recordRun(db, id, p.id, p.prompt_text, 'google_ai_overviews:dataforseo', brand, domain, aio.answer, aio.citations, results)
     }
   }
 
@@ -271,13 +341,14 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   const overall = scored.length ? Math.round(scored.reduce((a, r) => a + r.score, 0) / scored.length) : 0
 
   const byEngine: Record<string, { overall: number; count: number }> = {}
-  for (const eng of engines) {
-    const rows = scored.filter((r) => r.engine === eng.key)
-    byEngine[eng.key] = {
+  const engineKeys = Array.from(new Set(results.map((r) => r.engine)))
+  for (const key of engineKeys) {
+    const rows = scored.filter((r) => r.engine === key)
+    byEngine[key] = {
       overall: rows.length ? Math.round(rows.reduce((a, r) => a + r.score, 0) / rows.length) : 0,
       count: rows.length,
     }
   }
 
-  return NextResponse.json({ overall, engines: byEngine, count: results.length, results })
+  return NextResponse.json({ overall, engines: byEngine, count: results.length, aioError, results })
 }
