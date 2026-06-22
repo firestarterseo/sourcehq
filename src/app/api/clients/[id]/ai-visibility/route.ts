@@ -156,7 +156,7 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
     }
   }
   // Any task that never finished records as no-overview
-  for (const id of pending) {
+  for (const id of Array.from(pending)) {
     const prompt = idToPrompt.get(id)!
     out.set(prompt.id, { answer: '', citations: [] })
   }
@@ -352,3 +352,4 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   return NextResponse.json({ overall, engines: byEngine, count: results.length, aioError, results })
 }
+
