@@ -37,6 +37,17 @@ async function getSession() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+function dataForSeoAuth() {
+  if (process.env.DATAFORSEO_B64) return `Basic ${process.env.DATAFORSEO_B64}`
+  const login = process.env.DATAFORSEO_LOGIN ?? ''
+  const password = process.env.DATAFORSEO_PASSWORD ?? ''
+  return `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}`
+}
+
+function dataForSeoConfigured() {
+  return !!(process.env.DATAFORSEO_B64 || (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD))
+}
+
 // --- Perplexity: one prompt, returns answer + citations ---
 async function queryPerplexity(prompt: string) {
   const res = await fetch(PERPLEXITY_API, {
@@ -95,13 +106,10 @@ function parseAIOResult(result: any): { answer: string; citations: string[] } {
 // --- AI Overviews via DataForSEO task-based: post all keywords, poll in parallel ---
 async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<Map<string, { answer: string; citations: string[] }>> {
   const out = new Map<string, { answer: string; citations: string[] }>()
-  const login = process.env.DATAFORSEO_LOGIN!
-  const password = process.env.DATAFORSEO_PASSWORD!
-  const auth = `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}`
+  const auth = dataForSeoAuth()
 
   const kwToPrompt = new Map(prompts.map((p) => [p.prompt_text, p]))
 
-  // 1. Post every keyword in one request
   const postBody = prompts.map((p) => ({
     keyword: p.prompt_text,
     location_code: 2840,
@@ -124,7 +132,6 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
     throw new Error(`DataForSEO task_post status ${postData?.status_code}: ${postData?.status_message}`)
   }
 
-  // Map each task id back to its prompt
   const idToPrompt = new Map<string, { id: string; prompt_text: string }>()
   for (const t of postData?.tasks ?? []) {
     const kw = t?.data?.keyword
@@ -135,7 +142,6 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
     throw new Error('DataForSEO task_post returned no usable task ids')
   }
 
-  // 2. Poll in rounds. Tasks finish in parallel server-side, so total wait is one task's time, not the sum.
   const pending = new Set(idToPrompt.keys())
   for (let round = 0; round < 25 && pending.size > 0; round++) {
     await sleep(3000)
@@ -155,7 +161,6 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
       }
     }
   }
-  // Any task that never finished records as no-overview
   for (const id of Array.from(pending)) {
     const prompt = idToPrompt.get(id)!
     out.set(prompt.id, { answer: '', citations: [] })
@@ -278,7 +283,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .select('id, prompt_text, intent_tag, active')
     .eq('client_id', id)
 
-  return NextResponse.json({ runs: runs || [], prompts: prompts || [], aioConfigured: !!(process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) })
+  return NextResponse.json({ runs: runs || [], prompts: prompts || [], aioConfigured: dataForSeoConfigured() })
 }
 
 // --- POST: execute a visibility run across all active prompts and engines ---
@@ -310,9 +315,8 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   const results: any[] = []
   let aioError: string | null = null
 
-  // Fetch all AI Overviews up front via the task-based endpoints. Only runs when DataForSEO creds exist.
   let aioByPrompt: Map<string, { answer: string; citations: string[] }> | null = null
-  if (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) {
+  if (dataForSeoConfigured()) {
     try {
       aioByPrompt = await fetchAIOverviews(prompts)
     } catch (err: any) {
@@ -321,7 +325,6 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     }
   }
 
-  // One pass per prompt: Perplexity live, then AI Overviews from the prefetched map
   for (const p of prompts) {
     try {
       const { answer, citations } = await queryPerplexity(p.prompt_text)
@@ -352,5 +355,3 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   return NextResponse.json({ overall, engines: byEngine, count: results.length, aioError, results })
 }
-
-
