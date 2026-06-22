@@ -278,7 +278,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .select('id, prompt_text, intent_tag, active')
     .eq('client_id', id)
 
-  return NextResponse.json({ runs: runs || [], prompts: prompts || [] })
+  return NextResponse.json({ runs: runs || [], prompts: prompts || [], aioConfigured: !!(process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) })
 }
 
 // --- POST: execute a visibility run across all active prompts and engines ---
@@ -352,4 +352,5 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   return NextResponse.json({ overall, engines: byEngine, count: results.length, aioError, results })
 }
+
 
