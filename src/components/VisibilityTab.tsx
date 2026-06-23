@@ -21,7 +21,7 @@ type EngineDef = { key: string; label: string; short: string; family: 'search' |
 const ENGINES: EngineDef[] = [
   { key: 'google_ai_overviews:dataforseo', label: 'Google AI Overviews', short: 'AIO', family: 'search', live: true },
   { key: 'google_ai_mode:dataforseo', label: 'Google AI Mode', short: 'Mode', family: 'search', live: false },
-  { key: 'chatgpt:openai', label: 'ChatGPT', short: 'GPT', family: 'conversational', live: false },
+  { key: 'chatgpt:gpt-5.4-mini', label: 'ChatGPT', short: 'GPT', family: 'conversational', live: true },
   { key: 'gemini:google', label: 'Gemini', short: 'Gem', family: 'conversational', live: false },
   { key: 'perplexity:sonar-pro', label: 'Perplexity', short: 'Plx', family: 'conversational', live: true },
 ]
@@ -349,3 +349,4 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
