@@ -1,0 +1,317 @@
+﻿import { createClient } from '@supabase/supabase-js'
+
+const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
+export const PERPLEXITY_MODEL = 'sonar-pro'
+const DATAFORSEO_LIVE = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced'
+
+export function adminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export function dataForSeoAuth() {
+  if (process.env.DATAFORSEO_B64) return `Basic ${process.env.DATAFORSEO_B64}`
+  const login = process.env.DATAFORSEO_LOGIN ?? ''
+  const password = process.env.DATAFORSEO_PASSWORD ?? ''
+  return `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}`
+}
+
+export function dataForSeoConfigured() {
+  return !!(process.env.DATAFORSEO_B64 || (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD))
+}
+
+export function hostOf(url: string) {
+  try { return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase() }
+  catch { return String(url).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase() }
+}
+
+export function tagCitations(citations: string[], domain: string, competitors: string[]): { url: string; tag: 'own' | 'competitor' | null }[] {
+  const compHosts = competitors.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
+  return (citations || []).map((url) => {
+    const host = hostOf(url)
+    let tag: 'own' | 'competitor' | null = null
+    if (domain && host.includes(domain)) tag = 'own'
+    else if (compHosts.some((c) => host.includes(c.replace(/\s+/g, '')) || c.includes(host.split('.')[0]))) tag = 'competitor'
+    return { url, tag }
+  })
+}
+
+async function queryPerplexity(prompt: string) {
+  const res = await fetch(PERPLEXITY_API, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: PERPLEXITY_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Perplexity ${res.status}: ${body.slice(0, 200)}`)
+  }
+  const data = await res.json()
+  const answer = data?.choices?.[0]?.message?.content ?? ''
+  let citations: string[] = []
+  if (Array.isArray(data?.citations)) citations = data.citations
+  else if (Array.isArray(data?.search_results)) citations = data.search_results.map((s: any) => s.url || s.link).filter(Boolean)
+  return { answer, citations }
+}
+
+function parseAIOResult(result: any): { answer: string; citations: string[] } {
+  const items = result?.items ?? []
+  const aio = Array.isArray(items) ? items.find((it: any) => it?.type === 'ai_overview') : null
+  if (!aio) return { answer: '', citations: [] }
+
+  let answer = typeof aio.markdown === 'string' ? aio.markdown : ''
+  if (!answer && Array.isArray(aio.items)) {
+    answer = aio.items
+      .filter((el: any) => el?.type === 'ai_overview_element')
+      .map((el: any) => el.markdown || el.text || '')
+      .filter(Boolean)
+      .join('\n\n')
+  }
+
+  const refs: string[] = []
+  const collect = (arr: any) => {
+    if (Array.isArray(arr)) {
+      for (const r of arr) {
+        if (r?.url) refs.push(String(r.url))
+      }
+    }
+  }
+  collect(aio.references)
+  if (Array.isArray(aio.items)) {
+    for (const el of aio.items) collect(el?.references)
+  }
+  return { answer, citations: Array.from(new Set(refs)) }
+}
+
+async function queryAIOverview(keyword: string): Promise<{ answer: string; citations: string[] }> {
+  const auth = dataForSeoAuth()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 90000)
+  try {
+    const res = await fetch(DATAFORSEO_LIVE, {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify([{
+        keyword,
+        location_code: 2840,
+        language_code: 'en',
+        load_async_ai_overview: true,
+        expand_ai_overview: true,
+      }]),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`DataForSEO live ${res.status}: ${body.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    if (data?.status_code !== 20000) {
+      throw new Error(`DataForSEO live status ${data?.status_code}: ${data?.status_message}`)
+    }
+    const result = data?.tasks?.[0]?.result?.[0]
+    return parseAIOResult(result)
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<{ map: Map<string, { answer: string; citations: string[] }>; error: string | null }> {
+  const map = new Map<string, { answer: string; citations: string[] }>()
+  let error: string | null = null
+  for (const p of prompts) {
+    try {
+      map.set(p.id, await queryAIOverview(p.prompt_text))
+    } catch (err: any) {
+      if (!error) error = err.message
+      map.set(p.id, { answer: '', citations: [] })
+    }
+  }
+  return { map, error }
+}
+
+async function parseAnswer(brand: string, prompt: string, answer: string) {
+  const parsePrompt = `You are analyzing an AI search engine's answer to measure brand visibility.
+
+TARGET BRAND: "${brand}"
+USER PROMPT WAS: "${prompt}"
+
+AI ENGINE ANSWER:
+"""
+${answer}
+"""
+
+Return ONLY a JSON object (no markdown, no preamble) with exactly these keys:
+{
+  "brand_mentioned": boolean,
+  "answer_position": number,
+  "total_named": number,
+  "competitors": ["string"],
+  "sentiment": "positive" | "neutral" | "negative" | "n/a"
+}
+
+Rules: brand_mentioned is true only if the TARGET BRAND is clearly named. answer_position is its order among all businesses named (1 = first), 0 if not mentioned. total_named is how many distinct businesses are named. competitors excludes the target brand. Be strict.`
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: parsePrompt }],
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Anthropic ${res.status}: ${body.slice(0, 200)}`)
+  }
+  const json = await res.json()
+  const text = (json.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
+  try {
+    return JSON.parse(text.replace(/```json|```/g, '').trim())
+  } catch {
+    const m = text.match(/\{[\s\S]*\}/)
+    if (m) return JSON.parse(m[0])
+    return { brand_mentioned: false, answer_position: 0, total_named: 0, competitors: [], sentiment: 'n/a' }
+  }
+}
+
+function scoreResult(parsed: any, cited: boolean) {
+  let score = 0
+  if (cited) score += 50
+  if (parsed.brand_mentioned) score += 30
+  if (parsed.brand_mentioned && parsed.answer_position > 0) {
+    score += Math.max(2, 20 - (parsed.answer_position - 1) * 4)
+  }
+  return Math.min(100, score)
+}
+
+async function recordRun(
+  db: any, clientId: string, promptId: string, promptText: string, engineKey: string,
+  brand: string, domain: string, answer: string, citations: string[], results: any[]
+) {
+  try {
+    const cited = domain ? citations.some((u) => String(u).toLowerCase().includes(domain)) : false
+    const parsed = answer
+      ? await parseAnswer(brand, promptText, answer)
+      : { brand_mentioned: false, answer_position: 0, total_named: 0, competitors: [], sentiment: 'n/a' }
+    const score = scoreResult(parsed, cited)
+
+    const { data: run } = await db
+      .from('ai_visibility_runs')
+      .insert({ client_id: clientId, prompt_id: promptId, engine: engineKey, raw_answer: answer, citations, score })
+      .select('id')
+      .single()
+
+    if (run) {
+      await db.from('ai_visibility_mentions').insert({
+        run_id: run.id,
+        brand_mentioned: !!parsed.brand_mentioned,
+        brand_cited: cited,
+        answer_position: Number(parsed.answer_position) || 0,
+        total_named: Number(parsed.total_named) || 0,
+        competitors: parsed.competitors || [],
+        sentiment: parsed.sentiment || 'n/a',
+      })
+    }
+
+    results.push({
+      engine: engineKey,
+      prompt: promptText,
+      mentioned: !!parsed.brand_mentioned,
+      cited,
+      position: parsed.answer_position,
+      score,
+      sentiment: parsed.sentiment || 'n/a',
+      citations: tagCitations(citations, domain, parsed.competitors || []),
+    })
+  } catch (err: any) {
+    results.push({ engine: engineKey, prompt: promptText, error: err.message })
+  }
+}
+
+export type RunOutcome = {
+  ok: boolean
+  error?: string
+  overall: number
+  engines: Record<string, { overall: number; count: number }>
+  count: number
+  aioError: string | null
+  results: any[]
+}
+
+// --- The single source of truth for running a client's visibility check. ---
+// Called by the manual POST and by the scheduled cron. Takes an admin db client.
+export async function runClientVisibility(db: any, clientId: string): Promise<RunOutcome> {
+  if (!process.env.PERPLEXITY_API_KEY) return { ok: false, error: 'PERPLEXITY_API_KEY not configured', overall: 0, engines: {}, count: 0, aioError: null, results: [] }
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, error: 'ANTHROPIC_API_KEY not configured', overall: 0, engines: {}, count: 0, aioError: null, results: [] }
+
+  const { data: client } = await db.from('clients').select('name, website').eq('id', clientId).single()
+  if (!client) return { ok: false, error: 'Client not found', overall: 0, engines: {}, count: 0, aioError: null, results: [] }
+  const brand = String(client.name).trim()
+  const domain = client.website ? String(client.website).replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase() : ''
+
+  const { data: prompts } = await db
+    .from('ai_visibility_prompts')
+    .select('id, prompt_text')
+    .eq('client_id', clientId)
+    .eq('active', true)
+
+  if (!prompts || prompts.length === 0) {
+    return { ok: false, error: 'No active prompts for this client.', overall: 0, engines: {}, count: 0, aioError: null, results: [] }
+  }
+
+  const results: any[] = []
+  let aioError: string | null = null
+
+  let aioByPrompt: Map<string, { answer: string; citations: string[] }> | null = null
+  if (dataForSeoConfigured()) {
+    const out = await fetchAIOverviews(prompts)
+    aioByPrompt = out.map
+    aioError = out.error
+  }
+
+  for (const p of prompts) {
+    try {
+      const { answer, citations } = await queryPerplexity(p.prompt_text)
+      await recordRun(db, clientId, p.id, p.prompt_text, `perplexity:${PERPLEXITY_MODEL}`, brand, domain, answer, citations, results)
+    } catch (err: any) {
+      results.push({ engine: `perplexity:${PERPLEXITY_MODEL}`, prompt: p.prompt_text, error: err.message })
+    }
+    await sleep(1000)
+
+    if (aioByPrompt) {
+      const aio = aioByPrompt.get(p.id) ?? { answer: '', citations: [] }
+      await recordRun(db, clientId, p.id, p.prompt_text, 'google_ai_overviews:dataforseo', brand, domain, aio.answer, aio.citations, results)
+    }
+  }
+
+  const scored = results.filter((r) => !r.error)
+  const overall = scored.length ? Math.round(scored.reduce((a, r) => a + r.score, 0) / scored.length) : 0
+
+  const byEngine: Record<string, { overall: number; count: number }> = {}
+  const engineKeys = Array.from(new Set(results.map((r) => r.engine)))
+  for (const key of engineKeys) {
+    const rows = scored.filter((r) => r.engine === key)
+    byEngine[key] = {
+      overall: rows.length ? Math.round(rows.reduce((a, r) => a + r.score, 0) / rows.length) : 0,
+      count: rows.length,
+    }
+  }
+
+  return { ok: true, overall, engines: byEngine, count: results.length, aioError, results }
+}
