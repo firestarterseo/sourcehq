@@ -5,6 +5,8 @@ export const PERPLEXITY_MODEL = 'sonar-pro'
 const DATAFORSEO_LIVE = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced'
 const OPENAI_RESPONSES = 'https://api.openai.com/v1/responses'
 export const OPENAI_MODEL = 'gpt-5.4-mini'
+export const GEMINI_MODEL = 'gemini-3.5-flash'
+const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 
 export function adminClient() {
   return createClient(
@@ -67,7 +69,6 @@ async function queryPerplexity(prompt: string) {
   return { answer, citations }
 }
 
-// --- ChatGPT via OpenAI Responses API with web search: returns answer + cited URLs ---
 async function queryChatGPT(prompt: string): Promise<{ answer: string; citations: string[] }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 180000)
@@ -90,9 +91,6 @@ async function queryChatGPT(prompt: string): Promise<{ answer: string; citations
       throw new Error(`OpenAI ${res.status}: ${body.slice(0, 200)}`)
     }
     const data = await res.json()
-
-    // The output is a typed array: web_search_call items + message items.
-    // Pull answer text from message.content[].text, citations from .annotations url_citation.
     let answer = ''
     const refs: string[] = []
     const output = Array.isArray(data?.output) ? data.output : []
@@ -107,8 +105,49 @@ async function queryChatGPT(prompt: string): Promise<{ answer: string; citations
         }
       }
     }
-    // Fallback: some shapes expose output_text directly.
     if (!answer && typeof data?.output_text === 'string') answer = data.output_text
+    return { answer, citations: Array.from(new Set(refs)) }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+// --- Gemini via generateContent with Google Search grounding: answer + cited URLs ---
+async function queryGemini(prompt: string): Promise<{ answer: string; citations: string[] }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120000)
+  try {
+    const res = await fetch(GEMINI_API, {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': process.env.GEMINI_API_KEY ?? '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        tools: [{ google_search: {} }],
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`Gemini ${res.status}: ${body.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    const cand = data?.candidates?.[0]
+    let answer = ''
+    const parts = cand?.content?.parts
+    if (Array.isArray(parts)) {
+      answer = parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).filter(Boolean).join('\n\n')
+    }
+    const refs: string[] = []
+    const chunks = cand?.groundingMetadata?.groundingChunks
+    if (Array.isArray(chunks)) {
+      for (const ch of chunks) {
+        const uri = ch?.web?.uri
+        if (uri) refs.push(String(uri))
+      }
+    }
     return { answer, citations: Array.from(new Set(refs)) }
   } finally {
     clearTimeout(timeout)
@@ -348,6 +387,16 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
         await recordRun(db, clientId, p.id, p.prompt_text, `chatgpt:${OPENAI_MODEL}`, brand, domain, answer, citations, results)
       } catch (err: any) {
         results.push({ engine: `chatgpt:${OPENAI_MODEL}`, prompt: p.prompt_text, error: err.message })
+      }
+      await sleep(1000)
+    }
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const { answer, citations } = await queryGemini(p.prompt_text)
+        await recordRun(db, clientId, p.id, p.prompt_text, `gemini:${GEMINI_MODEL}`, brand, domain, answer, citations, results)
+      } catch (err: any) {
+        results.push({ engine: `gemini:${GEMINI_MODEL}`, prompt: p.prompt_text, error: err.message })
       }
       await sleep(1000)
     }
