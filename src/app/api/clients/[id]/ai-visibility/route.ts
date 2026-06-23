@@ -7,8 +7,7 @@ export const maxDuration = 300
 
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
 const PERPLEXITY_MODEL = 'sonar-pro'
-const DATAFORSEO_POST = 'https://api.dataforseo.com/v3/serp/google/organic/task_post'
-const DATAFORSEO_GET = 'https://api.dataforseo.com/v3/serp/google/organic/task_get/advanced'
+const DATAFORSEO_LIVE = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced'
 
 function adminClient() {
   return createClient(
@@ -53,7 +52,6 @@ function hostOf(url: string) {
   catch { return String(url).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase() }
 }
 
-// Tag each cited URL: 'own' (client domain), 'competitor' (matches a named competitor), or null
 function tagCitations(citations: string[], domain: string, competitors: string[]): { url: string; tag: 'own' | 'competitor' | null }[] {
   const compHosts = competitors.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
   return (citations || []).map((url) => {
@@ -90,7 +88,7 @@ async function queryPerplexity(prompt: string) {
   return { answer, citations }
 }
 
-// --- Extract the AI Overview answer + cited URLs from one task_get result ---
+// --- Extract the AI Overview answer + cited URLs from one live result ---
 function parseAIOResult(result: any): { answer: string; citations: string[] } {
   const items = result?.items ?? []
   const aio = Array.isArray(items) ? items.find((it: any) => it?.type === 'ai_overview') : null
@@ -120,69 +118,52 @@ function parseAIOResult(result: any): { answer: string; citations: string[] } {
   return { answer, citations: Array.from(new Set(refs)) }
 }
 
-// --- AI Overviews via DataForSEO task-based: post all keywords, poll in parallel ---
-async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<Map<string, { answer: string; citations: string[] }>> {
-  const out = new Map<string, { answer: string; citations: string[] }>()
+// --- AI Overviews via DataForSEO LIVE Advanced: one call per keyword, overview waited inline ---
+async function queryAIOverview(keyword: string): Promise<{ answer: string; citations: string[] }> {
   const auth = dataForSeoAuth()
-
-  const kwToPrompt = new Map(prompts.map((p) => [p.prompt_text, p]))
-
-  const postBody = prompts.map((p) => ({
-    keyword: p.prompt_text,
-    location_code: 2840,
-    language_code: 'en',
-    load_async_ai_overview: true,
-    expand_ai_overview: true,
-    tag: 'sourcehq_aio',
-  }))
-  const postRes = await fetch(DATAFORSEO_POST, {
-    method: 'POST',
-    headers: { Authorization: auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify(postBody),
-  })
-  if (!postRes.ok) {
-    const body = await postRes.text()
-    throw new Error(`DataForSEO task_post ${postRes.status}: ${body.slice(0, 200)}`)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 90000)
+  try {
+    const res = await fetch(DATAFORSEO_LIVE, {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify([{
+        keyword,
+        location_code: 2840,
+        language_code: 'en',
+        load_async_ai_overview: true,
+        expand_ai_overview: true,
+      }]),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`DataForSEO live ${res.status}: ${body.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    if (data?.status_code !== 20000) {
+      throw new Error(`DataForSEO live status ${data?.status_code}: ${data?.status_message}`)
+    }
+    const result = data?.tasks?.[0]?.result?.[0]
+    return parseAIOResult(result)
+  } finally {
+    clearTimeout(timeout)
   }
-  const postData = await postRes.json()
-  if (postData?.status_code !== 20000) {
-    throw new Error(`DataForSEO task_post status ${postData?.status_code}: ${postData?.status_message}`)
-  }
+}
 
-  const idToPrompt = new Map<string, { id: string; prompt_text: string }>()
-  for (const t of postData?.tasks ?? []) {
-    const kw = t?.data?.keyword
-    const prompt = kw ? kwToPrompt.get(kw) : null
-    if (t?.id && prompt) idToPrompt.set(t.id, prompt)
-  }
-  if (idToPrompt.size === 0) {
-    throw new Error('DataForSEO task_post returned no usable task ids')
-  }
-
-  const pending = new Set(idToPrompt.keys())
-  for (let round = 0; round < 25 && pending.size > 0; round++) {
-    await sleep(3000)
-    for (const id of Array.from(pending)) {
-      try {
-        const getRes = await fetch(`${DATAFORSEO_GET}/${id}`, { method: 'GET', headers: { Authorization: auth } })
-        if (!getRes.ok) continue
-        const getData = await getRes.json()
-        const task = getData?.tasks?.[0]
-        if (task?.status_code === 20000 && Array.isArray(task?.result) && task.result.length) {
-          const prompt = idToPrompt.get(id)!
-          out.set(prompt.id, parseAIOResult(task.result[0]))
-          pending.delete(id)
-        }
-      } catch {
-        // transient, retry next round
-      }
+// --- Fetch AI Overviews for all prompts, one Live call each ---
+async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<{ map: Map<string, { answer: string; citations: string[] }>; error: string | null }> {
+  const map = new Map<string, { answer: string; citations: string[] }>()
+  let error: string | null = null
+  for (const p of prompts) {
+    try {
+      map.set(p.id, await queryAIOverview(p.prompt_text))
+    } catch (err: any) {
+      if (!error) error = err.message
+      map.set(p.id, { answer: '', citations: [] })
     }
   }
-  for (const id of Array.from(pending)) {
-    const prompt = idToPrompt.get(id)!
-    out.set(prompt.id, { answer: '', citations: [] })
-  }
-  return out
+  return { map, error }
 }
 
 // --- Parse an answer with Claude (language extraction only) ---
@@ -344,12 +325,9 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   let aioByPrompt: Map<string, { answer: string; citations: string[] }> | null = null
   if (dataForSeoConfigured()) {
-    try {
-      aioByPrompt = await fetchAIOverviews(prompts)
-    } catch (err: any) {
-      aioError = err.message
-      aioByPrompt = null
-    }
+    const out = await fetchAIOverviews(prompts)
+    aioByPrompt = out.map
+    aioError = out.error
   }
 
   for (const p of prompts) {
@@ -359,7 +337,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     } catch (err: any) {
       results.push({ engine: `perplexity:${PERPLEXITY_MODEL}`, prompt: p.prompt_text, error: err.message })
     }
-    await sleep(1200)
+    await sleep(1000)
 
     if (aioByPrompt) {
       const aio = aioByPrompt.get(p.id) ?? { answer: '', citations: [] }
