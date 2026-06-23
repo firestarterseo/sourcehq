@@ -147,7 +147,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   const allResults = Object.values(latest)
   const liveResults = allResults.filter(r => !r.error)
   const hasRuns = liveResults.length > 0
-  const inSetup = hasPrompts && !hasRuns
+  const inSetup = !hasRuns
   const mentionRate = hasRuns ? Math.round(liveResults.filter(r => r.mentioned).length / liveResults.length * 100) : null
   const citeRate = hasRuns ? Math.round(liveResults.filter(r => r.cited).length / liveResults.length * 100) : null
   const promptCount = prompts ? prompts.length : 0
@@ -310,7 +310,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
                   </div>
                 ))}
               </div>
-              <button onClick={runCheck} disabled={running} style={{ width: '100%', background: running ? '#9CA3AF' : violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '12px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+              <button onClick={runCheck} disabled={running || promptCount === 0} style={{ width: '100%', background: running ? '#9CA3AF' : violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '12px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
                 {running ? 'Running first check... this can take a few minutes' : `Check Visibility (${promptCount} prompt${promptCount === 1 ? '' : 's'})`}
               </button>
             </div>
@@ -410,3 +410,5 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
+
