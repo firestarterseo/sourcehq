@@ -55,6 +55,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   const [running, setRunning] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [suggesting, setSuggesting] = useState(false)
+  const [suggestNote, setSuggestNote] = useState('')
   const [newPrompt, setNewPrompt] = useState('')
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
@@ -98,14 +99,14 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   }
 
   async function getSuggestions() {
-    setSuggesting(true); setError('')
+    setSuggesting(true); setError(''); setSuggestNote('')
     try {
       const res = await fetch(`/api/clients/${clientId}/ai-visibility/suggest`)
       const data = await res.json()
       setSuggestions(data.suggestions || [])
-      if ((data.suggestions || []).length === 0 && data.note) setError(data.note)
+      if ((data.suggestions || []).length === 0) setSuggestNote(data.note || 'No suggestions available for this client.')
     } catch (e: any) {
-      setError(e.message || 'Could not get suggestions')
+      setSuggestNote(e.message || 'Could not get suggestions')
     }
     setSuggesting(false)
   }
@@ -222,6 +223,20 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     )
   }
 
+  function SuggestionChips() {
+    if (suggestions.length === 0) return null
+    return (
+      <div style={{ background: '#F6F4FC', border: '0.5px solid #E5E0F3', borderRadius: '10px', padding: '14px 16px', marginTop: '16px', textAlign: 'left' }}>
+        <div style={{ fontSize: '12px', color: violet, fontWeight: '600', marginBottom: '10px' }}>Suggested from Search Console \u00B7 tap to add</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+          {suggestions.map((s, i) => (
+            <button key={i} onClick={() => addPrompt(s, 'gsc-suggested')} style={{ background: '#fff', border: '0.5px solid #D8D5E3', borderRadius: '20px', padding: '6px 12px', fontSize: '12px', color: navy, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>+ {s}</button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
@@ -243,12 +258,25 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
       {!prompts ? (
         <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading\u2026</p>
       ) : !hasPrompts ? (
-        <div style={{ background: '#fff', border, borderRadius: '12px', textAlign: 'center', padding: '36px 24px' }}>
-          <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '16px', color: navy, margin: '0 0 8px' }}>Track this brand's AI visibility</h3>
-          <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 auto 20px', maxWidth: '440px', lineHeight: 1.6 }}>
-            Add the questions your customers ask AI assistants. We'll check whether this business gets recommended across engines, and track it over time.
-          </p>
-          <button onClick={getSuggestions} disabled={suggesting} style={{ background: violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 18px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>{suggesting ? 'Loading\u2026' : 'Suggest from Search Console'}</button>
+        <div style={{ background: '#fff', border, borderRadius: '12px', padding: '32px 24px' }}>
+          <div style={{ textAlign: 'center', maxWidth: '480px', margin: '0 auto' }}>
+            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '16px', color: navy, margin: '0 0 8px' }}>Track this brand's AI visibility</h3>
+            <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 0 20px', lineHeight: 1.6 }}>
+              Add the questions your customers ask AI assistants. Type one below, or pull real questions from this client's Search Console. We'll check whether this business gets recommended across engines, and track it over time.
+            </p>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track\u2026" style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
+              <button onClick={() => addPrompt(newPrompt)} disabled={adding || !newPrompt.trim()} style={{ background: violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>Add</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0' }}>
+              <div style={{ flex: 1, height: '0.5px', background: '#E5E5E3' }} />
+              <span style={{ fontSize: '11px', color: '#9CA3AF' }}>or</span>
+              <div style={{ flex: 1, height: '0.5px', background: '#E5E5E3' }} />
+            </div>
+            <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 18px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>{suggesting ? 'Loading\u2026' : 'Suggest from Search Console'}</button>
+            {suggestNote && suggestions.length === 0 && <p style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '12px' }}>{suggestNote}</p>}
+          </div>
+          <SuggestionChips />
         </div>
       ) : (
         <>
@@ -289,9 +317,8 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
           <div style={{ background: '#fff', border, borderRadius: '10px', overflow: 'hidden', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '0.5px solid #F3F4F6', background: '#FAFAF8' }}>
               <span style={{ fontSize: '11px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Prompt</span>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '12px' }}>
                 {ENGINES.map(def => <span key={def.key} style={{ fontSize: '11px', color: '#9CA3AF', width: '30px', textAlign: 'center' }}>{def.short}</span>)}
-                <span style={{ width: '21px', marginLeft: '4px' }} aria-hidden="true"></span>
               </div>
             </div>
             {prompts.map((p, i) => {
@@ -330,7 +357,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
           </div>
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track..." style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
+            <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track\u2026" style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
             <button onClick={() => addPrompt(newPrompt)} disabled={adding || !newPrompt.trim()} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>Add</button>
             <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{suggesting ? '...' : '+ Suggest from Search Console'}</button>
           </div>
@@ -350,9 +377,3 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
-
-
-
-
-
-
