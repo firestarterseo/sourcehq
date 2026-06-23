@@ -53,7 +53,6 @@ function hostOf(url: string) {
   catch { return String(url).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase() }
 }
 
-// Tag each cited URL: 'own' (client domain), 'competitor' (matches a named competitor), or null
 function tagCitations(citations: string[], domain: string, competitors: string[]): { url: string; tag: 'own' | 'competitor' | null }[] {
   const compHosts = competitors.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
   return (citations || []).map((url) => {
@@ -120,14 +119,14 @@ function parseAIOResult(result: any): { answer: string; citations: string[] } {
   return { answer, citations: Array.from(new Set(refs)) }
 }
 
-// --- AI Overviews via DataForSEO task-based: post all keywords, poll in parallel ---
-async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<Map<string, { answer: string; citations: string[] }>> {
-  const out = new Map<string, { answer: string; citations: string[] }>()
-  const auth = dataForSeoAuth()
+// Post one batch of keywords, poll their tasks, return Map of promptId -> parsed FOR HITS ONLY.
+// A completed-but-empty task is dropped from pending (re-reading it never changes), so empties
+// fall through and are handled by the caller's retry sweep with fresh tasks.
+async function runAioBatch(batch: { id: string; prompt_text: string }[], auth: string, maxRounds: number): Promise<Map<string, { answer: string; citations: string[] }>> {
+  const hits = new Map<string, { answer: string; citations: string[] }>()
+  const kwToPrompt = new Map(batch.map((p) => [p.prompt_text, p]))
 
-  const kwToPrompt = new Map(prompts.map((p) => [p.prompt_text, p]))
-
-  const postBody = prompts.map((p) => ({
+  const postBody = batch.map((p) => ({
     keyword: p.prompt_text,
     location_code: 2840,
     language_code: 'en',
@@ -160,7 +159,7 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
   }
 
   const pending = new Set(idToPrompt.keys())
-  for (let round = 0; round < 25 && pending.size > 0; round++) {
+  for (let round = 0; round < maxRounds && pending.size > 0; round++) {
     await sleep(3000)
     for (const id of Array.from(pending)) {
       try {
@@ -169,8 +168,11 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
         const getData = await getRes.json()
         const task = getData?.tasks?.[0]
         if (task?.status_code === 20000 && Array.isArray(task?.result) && task.result.length) {
+          const parsed = parseAIOResult(task.result[0])
           const prompt = idToPrompt.get(id)!
-          out.set(prompt.id, parseAIOResult(task.result[0]))
+          if (parsed.answer || parsed.citations.length) {
+            hits.set(prompt.id, parsed)
+          }
           pending.delete(id)
         }
       } catch {
@@ -178,10 +180,28 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
       }
     }
   }
-  for (const id of Array.from(pending)) {
-    const prompt = idToPrompt.get(id)!
-    out.set(prompt.id, { answer: '', citations: [] })
+  return hits
+}
+
+// --- AI Overviews: batch fetch with one retry sweep for prompts that came back empty ---
+async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<Map<string, { answer: string; citations: string[] }>> {
+  const auth = dataForSeoAuth()
+
+  const hits = await runAioBatch(prompts, auth, 25)
+
+  const empties = prompts.filter((p) => !hits.has(p.id))
+  if (empties.length > 0) {
+    await sleep(5000)
+    try {
+      const retry = await runAioBatch(empties, auth, 20)
+      for (const [k, v] of retry) hits.set(k, v)
+    } catch {
+      // retry is best-effort; keep first-pass hits
+    }
   }
+
+  const out = new Map<string, { answer: string; citations: string[] }>()
+  for (const p of prompts) out.set(p.id, hits.get(p.id) ?? { answer: '', citations: [] })
   return out
 }
 
