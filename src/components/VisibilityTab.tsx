@@ -37,8 +37,19 @@ function EngineGlyph({ def, color, size = 18 }: { def: EngineDef; color: string;
       </svg>
     )
   }
-  const glyph = def.family === 'search' ? '\u25CE' : '\u2726'
-  return <span style={{ fontSize: size, color, lineHeight: 1 }} aria-hidden="true">{glyph}</span>
+  if (def.family === 'search') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', verticalAlign: '-3px' }} aria-hidden="true">
+        <circle cx="12" cy="12" r="9" fill="none" stroke={color} strokeWidth="2" />
+        <circle cx="12" cy="12" r="3" fill={color} />
+      </svg>
+    )
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', verticalAlign: '-3px' }} aria-hidden="true">
+      <path d="M12 2 L14.5 9.5 L22 12 L14.5 14.5 L12 22 L9.5 14.5 L2 12 L9.5 9.5 Z" fill={color} />
+    </svg>
+  )
 }
 
 function fmtTime(iso: string) {
@@ -136,9 +147,10 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   const allResults = Object.values(latest)
   const liveResults = allResults.filter(r => !r.error)
   const hasRuns = liveResults.length > 0
+  const inSetup = hasPrompts && !hasRuns
   const mentionRate = hasRuns ? Math.round(liveResults.filter(r => r.mentioned).length / liveResults.length * 100) : null
   const citeRate = hasRuns ? Math.round(liveResults.filter(r => r.cited).length / liveResults.length * 100) : null
-  const liveCount = ENGINES.filter(e => e.live).length
+  const promptCount = prompts ? prompts.length : 0
 
   const searchEngines = ENGINES.filter(e => e.family === 'search')
   const convoEngines = ENGINES.filter(e => e.family === 'conversational')
@@ -163,7 +175,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
             <span style={{ fontWeight: '600', fontSize: '14px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '7px' }}><EngineGlyph def={def} color="#9CA3AF" size={16} />{def.label}</span>
             <span style={{ background: '#F3F4F6', color: '#6B7280', fontSize: '11px', fontWeight: '600', padding: '4px 10px', borderRadius: '20px' }}>Roadmap</span>
           </div>
-          <div style={{ fontSize: '12px', color: '#9CA3AF' }}>Not wired yet</div>
+          <div style={{ fontSize: '12px', color: '#9CA3AF' }}>Coming soon</div>
         </div>
       )
     }
@@ -175,7 +187,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
       <div style={engineCard}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
           <span style={{ fontWeight: '600', fontSize: '14px', color: navy, display: 'flex', alignItems: 'center', gap: '7px' }}><EngineGlyph def={def} color={navy} size={16} />{def.label}</span>
-          <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '20px', color: navy }}>{stat ? stat.overall : '\u2014'}</span>
+          <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '20px', color: navy }}>{stat ? stat.overall : '-'}</span>
         </div>
         <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', background: '#F1EFE8', marginBottom: '8px' }}>
           <div style={{ width: `${Math.round(citedN / total * 100)}%`, background: gold }} />
@@ -191,7 +203,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   function DetailPanel({ def, r }: { def: EngineDef; r: RunResult }) {
     const statusBg = r.cited ? '#E1F5EE' : r.mentioned ? '#F1EFE8' : '#FCEBEB'
     const statusFg = r.cited ? '#0F6E56' : r.mentioned ? '#5F5E5A' : '#A32D2D'
-    const statusText = r.cited ? `Cited${r.position ? ` \u00B7 #${r.position}` : ''}` : r.mentioned ? 'Mentioned \u00B7 not cited' : 'Absent'
+    const statusText = r.cited ? `Cited${r.position ? ` #${r.position}` : ''}` : r.mentioned ? 'Mentioned - not cited' : 'Absent'
     return (
       <div style={{ padding: '0 16px 14px' }}>
         <div style={{ background: '#FAFAF8', borderRadius: '10px', padding: '14px 16px' }}>
@@ -227,12 +239,21 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     if (suggestions.length === 0) return null
     return (
       <div style={{ background: '#F6F4FC', border: '0.5px solid #E5E0F3', borderRadius: '10px', padding: '14px 16px', marginTop: '16px', textAlign: 'left' }}>
-        <div style={{ fontSize: '12px', color: violet, fontWeight: '600', marginBottom: '10px' }}>Suggested from Search Console \u00B7 tap to add</div>
+        <div style={{ fontSize: '12px', color: violet, fontWeight: '600', marginBottom: '10px' }}>Suggested from Search Console - tap to add</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
           {suggestions.map((s, i) => (
             <button key={i} onClick={() => addPrompt(s, 'gsc-suggested')} style={{ background: '#fff', border: '0.5px solid #D8D5E3', borderRadius: '20px', padding: '6px 12px', fontSize: '12px', color: navy, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>+ {s}</button>
           ))}
         </div>
+      </div>
+    )
+  }
+
+  function AddRow() {
+    return (
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track..." style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
+        <button onClick={() => addPrompt(newPrompt)} disabled={adding || !newPrompt.trim()} style={{ background: violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>Add</button>
       </div>
     )
   }
@@ -246,9 +267,9 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
             How often AI engines recommend this business.{lastRun ? ` Last run: ${lastRun}` : ''}
           </p>
         </div>
-        {hasPrompts && (
+        {hasRuns && (
           <button onClick={runCheck} disabled={running} style={{ background: running ? '#9CA3AF' : violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
-            {running ? 'Running\u2026' : '\u25B6 Run Visibility Check'}
+            {running ? 'Running...' : 'Re-run Check'}
           </button>
         )}
       </div>
@@ -256,45 +277,56 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
       {error && <div style={{ background: '#FEF3C7', border: '0.5px solid #FDE68A', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#92400E' }}>{error}</div>}
 
       {!prompts ? (
-        <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading\u2026</p>
-      ) : !hasPrompts ? (
-        <div style={{ background: '#fff', border, borderRadius: '12px', padding: '32px 24px' }}>
-          <div style={{ textAlign: 'center', maxWidth: '480px', margin: '0 auto' }}>
-            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '16px', color: navy, margin: '0 0 8px' }}>Track this brand's AI visibility</h3>
-            <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 0 20px', lineHeight: 1.6 }}>
-              Add the questions your customers ask AI assistants. Type one below, or pull real questions from this client's Search Console. We'll check whether this business gets recommended across engines, and track it over time.
+        <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading...</p>
+      ) : inSetup ? (
+        <div style={{ background: '#fff', border, borderRadius: '12px', padding: '28px 24px' }}>
+          <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '16px', color: navy, margin: '0 0 6px', textAlign: 'center' }}>Set up tracking for this brand</h3>
+            <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 0 20px', lineHeight: 1.6, textAlign: 'center' }}>
+              Add the questions your customers ask AI assistants. Add as many as you like, then run the first check.
             </p>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track\u2026" style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
-              <button onClick={() => addPrompt(newPrompt)} disabled={adding || !newPrompt.trim()} style={{ background: violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>Add</button>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0' }}>
+
+            <AddRow />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '16px 0' }}>
               <div style={{ flex: 1, height: '0.5px', background: '#E5E5E3' }} />
-              <span style={{ fontSize: '11px', color: '#9CA3AF' }}>or</span>
+              <span style={{ fontSize: '11px', color: '#9CA3AF' }}>or pull from real search data</span>
               <div style={{ flex: 1, height: '0.5px', background: '#E5E5E3' }} />
             </div>
-            <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 18px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>{suggesting ? 'Loading\u2026' : 'Suggest from Search Console'}</button>
-            {suggestNote && suggestions.length === 0 && <p style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '12px' }}>{suggestNote}</p>}
+            <div style={{ textAlign: 'center' }}>
+              <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 18px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>{suggesting ? 'Loading...' : 'Suggest from Search Console'}</button>
+              {suggestNote && suggestions.length === 0 && <p style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '12px' }}>{suggestNote}</p>}
+            </div>
+
+            <SuggestionChips />
+
+            <div style={{ marginTop: '24px', borderTop: '0.5px solid #F3F4F6', paddingTop: '18px' }}>
+              <div style={{ fontSize: '11px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>Prompts added ({promptCount})</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+                {prompts.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAF8', borderRadius: '8px', padding: '9px 12px' }}>
+                    <span style={{ fontSize: '13px', color: navy }}>{p.prompt_text}</span>
+                    <button onClick={() => removePrompt(p.id)} title="Remove" style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '13px', cursor: 'pointer', padding: '2px 4px' }}>{'x'}</button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={runCheck} disabled={running} style={{ width: '100%', background: running ? '#9CA3AF' : violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '12px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+                {running ? 'Running first check... this can take a few minutes' : `Check Visibility (${promptCount} prompt${promptCount === 1 ? '' : 's'})`}
+              </button>
+            </div>
           </div>
-          <SuggestionChips />
         </div>
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
             <div style={{ background: lavender, borderRadius: '10px', padding: '14px' }}>
               <div style={{ fontSize: '11.5px', color: violet, fontWeight: '500' }}>Overall Score</div>
-              <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{overall ?? '\u2014'}{overall != null && <span style={{ fontSize: '14px', color: '#9CA3AF', fontWeight: '500' }}>/100</span>}</div>
+              <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{overall ?? '-'}{overall != null && <span style={{ fontSize: '14px', color: '#9CA3AF', fontWeight: '500' }}>/100</span>}</div>
             </div>
-            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Mention Rate</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{mentionRate != null ? mentionRate + '%' : '\u2014'}</div></div>
-            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Citation Rate</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{citeRate != null ? citeRate + '%' : '\u2014'}</div></div>
-            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Engines Live</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{liveCount}<span style={{ fontSize: '14px', color: '#9CA3AF', fontWeight: '500' }}> of {ENGINES.length}</span></div></div>
+            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Mention Rate</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{mentionRate != null ? mentionRate + '%' : '-'}</div></div>
+            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Citation Rate</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{citeRate != null ? citeRate + '%' : '-'}</div></div>
+            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Prompts Tracked</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{promptCount}</div></div>
           </div>
-
-          {!hasRuns && (
-            <div style={{ background: lavender, borderRadius: '10px', padding: '14px 16px', marginBottom: '20px', fontSize: '13px', color: navy }}>
-              Your prompts are ready. Click <strong>Run Visibility Check</strong> above to see where this business shows up across AI engines.
-            </div>
-          )}
 
           <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '14px', color: navy, margin: '0 0 8px' }}>Search-feature engines</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
@@ -342,7 +374,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
                           </span>
                         )
                       })}
-                      <button onClick={() => removePrompt(p.id)} title="Remove" style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '13px', cursor: 'pointer', padding: '2px 4px', marginLeft: '4px' }}>{'\u2715'}</button>
+                      <button onClick={() => removePrompt(p.id)} title="Remove" style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '13px', cursor: 'pointer', padding: '2px 4px', marginLeft: '4px' }}>{'x'}</button>
                     </div>
                   </div>
                   {ENGINES.map(def => {
@@ -356,15 +388,16 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
             })}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track\u2026" style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
-            <button onClick={() => addPrompt(newPrompt)} disabled={adding || !newPrompt.trim()} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>Add</button>
-            <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{suggesting ? '...' : '+ Suggest from Search Console'}</button>
+          <div style={{ marginBottom: '16px' }}>
+            <AddRow />
+            <div style={{ marginTop: '8px', textAlign: 'right' }}>
+              <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '8px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{suggesting ? '...' : '+ Suggest from Search Console'}</button>
+            </div>
           </div>
 
           {suggestions.length > 0 && (
             <div style={{ background: '#F6F4FC', border: '0.5px solid #E5E0F3', borderRadius: '10px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '12px', color: violet, fontWeight: '600', marginBottom: '10px' }}>Suggested from Search Console \u00B7 tap to add</div>
+              <div style={{ fontSize: '12px', color: violet, fontWeight: '600', marginBottom: '10px' }}>Suggested from Search Console - tap to add</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
                 {suggestions.map((s, i) => (
                   <button key={i} onClick={() => addPrompt(s, 'gsc-suggested')} style={{ background: '#fff', border: '0.5px solid #D8D5E3', borderRadius: '20px', padding: '6px 12px', fontSize: '12px', color: navy, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>+ {s}</button>
