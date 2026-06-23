@@ -41,6 +41,11 @@ function EngineGlyph({ def, color, size = 18 }: { def: EngineDef; color: string;
   return <span style={{ fontSize: size, color, lineHeight: 1 }} aria-hidden="true">{glyph}</span>
 }
 
+function fmtTime(iso: string) {
+  try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }
+  catch { return '' }
+}
+
 export default function VisibilityTab({ clientId }: { clientId: string }) {
   const [prompts, setPrompts] = useState<Prompt[] | null>(null)
   const [latest, setLatest] = useState<Record<string, RunResult>>({})
@@ -61,6 +66,12 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
       .then(data => {
         const active = (data.prompts || []).filter((p: Prompt) => p.active !== false)
         setPrompts(active)
+        const map: Record<string, RunResult> = {}
+        for (const r of (data.results || [])) map[`${r.engine || 'unknown'}|${r.prompt}`] = r
+        setLatest(map)
+        setEngines(data.engines || {})
+        setOverall(data.overall ?? null)
+        setLastRun(data.lastRunAt ? fmtTime(data.lastRunAt) : null)
       })
       .catch(() => setPrompts([]))
   }
@@ -179,7 +190,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   function DetailPanel({ def, r }: { def: EngineDef; r: RunResult }) {
     const statusBg = r.cited ? '#E1F5EE' : r.mentioned ? '#F1EFE8' : '#FCEBEB'
     const statusFg = r.cited ? '#0F6E56' : r.mentioned ? '#5F5E5A' : '#A32D2D'
-    const statusText = r.cited ? `Cited${r.position ? ` \u00b7 #${r.position}` : ''}` : r.mentioned ? 'Mentioned \u00b7 not cited' : 'Absent'
+    const statusText = r.cited ? `Cited${r.position ? ` \u00B7 #${r.position}` : ''}` : r.mentioned ? 'Mentioned \u00B7 not cited' : 'Absent'
     return (
       <div style={{ padding: '0 16px 14px' }}>
         <div style={{ background: '#FAFAF8', borderRadius: '10px', padding: '14px 16px' }}>
@@ -318,14 +329,14 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
           </div>
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track\u2026" style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
+            <input type="text" value={newPrompt} onChange={e => setNewPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addPrompt(newPrompt) }} placeholder="Add a prompt to track..." style={{ flex: 1, border: '0.5px solid #E5E5E3', borderRadius: '8px', padding: '10px 12px', fontFamily: 'DM Sans, sans-serif', fontSize: '13px', color: navy, outline: 'none' }} />
             <button onClick={() => addPrompt(newPrompt)} disabled={adding || !newPrompt.trim()} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>Add</button>
-            <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{suggesting ? '\u2026' : '+ Suggest from Search Console'}</button>
+            <button onClick={getSuggestions} disabled={suggesting} style={{ background: '#fff', color: violet, border: `0.5px solid ${violet}`, borderRadius: '8px', padding: '10px 14px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{suggesting ? '...' : '+ Suggest from Search Console'}</button>
           </div>
 
           {suggestions.length > 0 && (
             <div style={{ background: '#F6F4FC', border: '0.5px solid #E5E0F3', borderRadius: '10px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '12px', color: violet, fontWeight: '600', marginBottom: '10px' }}>Suggested from Search Console \u00b7 tap to add</div>
+              <div style={{ fontSize: '12px', color: violet, fontWeight: '600', marginBottom: '10px' }}>Suggested from Search Console \u00B7 tap to add</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
                 {suggestions.map((s, i) => (
                   <button key={i} onClick={() => addPrompt(s, 'gsc-suggested')} style={{ background: '#fff', border: '0.5px solid #D8D5E3', borderRadius: '20px', padding: '6px 12px', fontSize: '12px', color: navy, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>+ {s}</button>

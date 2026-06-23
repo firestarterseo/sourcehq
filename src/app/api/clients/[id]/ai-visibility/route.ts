@@ -273,25 +273,91 @@ async function recordRun(
   }
 }
 
-// --- GET: return run history (trend series) ---
+// --- GET: return the latest stored result per prompt+engine, ready to render ---
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   const db = adminClient()
-  const { data: runs } = await db
-    .from('ai_visibility_runs')
-    .select('id, prompt_id, engine, run_at, score, citations')
-    .eq('client_id', id)
-    .order('run_at', { ascending: true })
+
+  const { data: client } = await db.from('clients').select('name, website').eq('id', id).single()
+  const domain = client?.website ? String(client.website).replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase() : ''
 
   const { data: prompts } = await db
     .from('ai_visibility_prompts')
     .select('id, prompt_text, intent_tag, active')
     .eq('client_id', id)
 
-  return NextResponse.json({ runs: runs || [], prompts: prompts || [], aioConfigured: dataForSeoConfigured() })
+  const { data: runs } = await db
+    .from('ai_visibility_runs')
+    .select('id, prompt_id, engine, run_at, score, citations')
+    .eq('client_id', id)
+    .order('run_at', { ascending: true })
+
+  const promptText = new Map<string, string>((prompts || []).map((p: any) => [p.id, p.prompt_text]))
+
+  // Pull mentions for all runs so we can rebuild the full result shape.
+  const runIds = (runs || []).map((r: any) => r.id)
+  const mentionsByRun = new Map<string, any>()
+  if (runIds.length) {
+    const { data: mentions } = await db
+      .from('ai_visibility_mentions')
+      .select('run_id, brand_mentioned, brand_cited, answer_position, total_named, competitors, sentiment')
+      .in('run_id', runIds)
+    for (const m of mentions || []) mentionsByRun.set(m.run_id, m)
+  }
+
+  // Keep the most recent run per engine|prompt pair (runs are sorted ascending, so last write wins).
+  const latestByPair = new Map<string, any>()
+  let lastRunAt: string | null = null
+  for (const run of runs || []) {
+    if (!promptText.has(run.prompt_id)) continue
+    latestByPair.set(`${run.engine}|${run.prompt_id}`, run)
+    if (!lastRunAt || run.run_at > lastRunAt) lastRunAt = run.run_at
+  }
+
+  // Rebuild the same result shape the POST returns, from stored data.
+  const results: any[] = []
+  for (const run of Array.from(latestByPair.values())) {
+    const m = mentionsByRun.get(run.id)
+    const mentioned = !!(m && m.brand_mentioned)
+    const cited = !!(m && m.brand_cited)
+    const competitors = (m && Array.isArray(m.competitors)) ? m.competitors : []
+    results.push({
+      engine: run.engine,
+      prompt: promptText.get(run.prompt_id),
+      mentioned,
+      cited,
+      position: m ? Number(m.answer_position) || 0 : 0,
+      score: Number(run.score) || 0,
+      sentiment: m ? (m.sentiment || 'n/a') : 'n/a',
+      citations: tagCitations(run.citations || [], domain, competitors),
+    })
+  }
+
+  const scored = results
+  const overall = scored.length ? Math.round(scored.reduce((a, r) => a + r.score, 0) / scored.length) : 0
+
+  const byEngine: Record<string, { overall: number; count: number }> = {}
+  const engineKeys = Array.from(new Set(results.map((r) => r.engine)))
+  for (const key of engineKeys) {
+    const rows = scored.filter((r) => r.engine === key)
+    byEngine[key] = {
+      overall: rows.length ? Math.round(rows.reduce((a, r) => a + r.score, 0) / rows.length) : 0,
+      count: rows.length,
+    }
+  }
+
+  return NextResponse.json({
+    prompts: prompts || [],
+    runs: runs || [],
+    results,
+    engines: byEngine,
+    overall: results.length ? overall : null,
+    lastRunAt,
+    aioConfigured: dataForSeoConfigured(),
+  })
 }
 
 // --- POST: execute a visibility run across all active prompts and engines ---
