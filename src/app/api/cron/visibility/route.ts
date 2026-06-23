@@ -7,22 +7,11 @@ const MAX_CLIENTS_PER_RUN = 5
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization')
-
-  // TEMP DEBUG: reveal what the server sees. Remove after diagnosis.
-  if (req.nextUrl.searchParams.get('debug') === '1') {
-    return NextResponse.json({
-      serverHasSecret: !!secret,
-      serverSecretLen: secret ? secret.length : 0,
-      serverSecretHead: secret ? secret.slice(0, 6) : null,
-      authHeaderReceived: auth,
-      authHeaderLen: auth ? auth.length : 0,
-      matches: auth === `Bearer ${secret}`,
-    })
-  }
-
   if (secret) {
-    if (auth !== `Bearer ${secret}`) {
+    const auth = req.headers.get('authorization')
+    const viaHeader = auth === `Bearer ${secret}`
+    const viaQuery = req.nextUrl.searchParams.get('key') === secret
+    if (!viaHeader && !viaQuery) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
   }
