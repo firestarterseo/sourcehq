@@ -289,8 +289,9 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
           <div style={{ background: '#fff', border, borderRadius: '10px', overflow: 'hidden', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '0.5px solid #F3F4F6', background: '#FAFAF8' }}>
               <span style={{ fontSize: '11px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Prompt</span>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 {ENGINES.map(def => <span key={def.key} style={{ fontSize: '11px', color: '#9CA3AF', width: '30px', textAlign: 'center' }}>{def.short}</span>)}
+                <span style={{ width: '21px', marginLeft: '4px' }} aria-hidden="true"></span>
               </div>
             </div>
             {prompts.map((p, i) => {
@@ -349,4 +350,6 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
+
 
