@@ -28,25 +28,39 @@ function isoDaysAgo(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 }
 
-// Pull top GSC queries for the client (same approach as the report route)
-async function getTopQueries(clientId: string): Promise<string[]> {
+// Returns the top GSC queries for the client, plus an honest reason if it could not.
+async function getTopQueries(clientId: string): Promise<{ queries: string[]; reason: string | null; property: string | null }> {
   const auth = await getGoogleAuth(clientId)
-  const property = auth.selection.gsc_property
-  if (!auth.token || !property) return []
+  const property = auth.selection?.gsc_property ?? null
 
-  const res = await fetch(`${GSC_API}/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      startDate: isoDaysAgo(92),
-      endDate: isoDaysAgo(2),
-      dimensions: ['query'],
-      rowLimit: 40,
-    }),
-  })
-  if (!res.ok) return []
+  if (!auth.token) return { queries: [], reason: 'no-token: Google account not connected for this client (or token revoked).', property }
+  if (!property) return { queries: [], reason: 'no-property: Google is connected but no Search Console property is selected for this client.', property }
+
+  let res: Response
+  try {
+    res = await fetch(`${GSC_API}/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        startDate: isoDaysAgo(92),
+        endDate: isoDaysAgo(2),
+        dimensions: ['query'],
+        rowLimit: 40,
+      }),
+    })
+  } catch (err: any) {
+    return { queries: [], reason: `fetch-threw: ${String(err?.message || err).slice(0, 160)}`, property }
+  }
+
+  if (!res.ok) {
+    const errBody = await res.text()
+    return { queries: [], reason: `gsc-${res.status}: ${errBody.slice(0, 200)}`, property }
+  }
+
   const json = await res.json()
-  return (json.rows || []).map((r: any) => r.keys[0]).filter(Boolean)
+  const queries = (json.rows || []).map((r: any) => r.keys[0]).filter(Boolean)
+  if (queries.length === 0) return { queries: [], reason: 'no-rows: GSC returned zero query rows for the 90-day window.', property }
+  return { queries, reason: null, property }
 }
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -55,17 +69,17 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
 
-  const queries = await getTopQueries(id)
+  const { queries, reason, property } = await getTopQueries(id)
   if (queries.length === 0) {
-    return NextResponse.json({ suggestions: [], note: 'No Search Console queries available for this client (GSC not connected, or no data).' })
+    return NextResponse.json({ suggestions: [], note: reason || 'No Search Console queries available.', property, debugReason: reason })
   }
 
   const prompt = `You are helping build an AI visibility tracker. Below are real Google Search Console queries for a business. Your job: convert the ones that represent genuine buyer/customer intent into the natural-language QUESTIONS a person would actually ask an AI assistant (ChatGPT, Perplexity, Google AI) when looking for this kind of business or information.
 
 RULES:
-- Only convert queries that represent a customer looking for a service, product, recommendation, or answer. SKIP branded/navigational queries (the business's own name), nonsense, and queries too vague to form a question.
+- Only convert queries that represent a customer looking for a service, product, recommendation, or answer. SKIP branded/navigational queries (the business own name), nonsense, and queries too vague to form a question.
 - Rewrite each kept query as a complete, natural question a real person would type into an AI assistant. Keep the location/intent.
-- Prefer "who/what/which/how" questions a buyer would ask when choosing or researching.
+- Prefer who/what/which/how questions a buyer would ask when choosing or researching.
 - Return 8-12 suggestions max, the highest-intent ones. De-duplicate similar questions.
 
 GSC QUERIES:
@@ -87,8 +101,8 @@ Respond with ONLY a JSON array of strings, no markdown, no preamble. Example: ["
     }),
   })
   if (!res.ok) {
-    const body = await res.text()
-    return NextResponse.json({ error: `AI request failed: ${body.slice(0, 200)}` }, { status: 500 })
+    const errBody = await res.text()
+    return NextResponse.json({ error: `AI request failed: ${errBody.slice(0, 200)}` }, { status: 500 })
   }
   const json = await res.json()
   const text = (json.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
@@ -100,5 +114,5 @@ Respond with ONLY a JSON array of strings, no markdown, no preamble. Example: ["
     if (m) try { suggestions = JSON.parse(m[0]) } catch {}
   }
 
-  return NextResponse.json({ suggestions, sourceQueryCount: queries.length })
+  return NextResponse.json({ suggestions, sourceQueryCount: queries.length, property })
 }
