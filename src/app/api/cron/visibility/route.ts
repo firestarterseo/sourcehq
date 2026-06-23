@@ -3,16 +3,25 @@ import { adminClient, runClientVisibility } from '@/lib/run-visibility'
 
 export const maxDuration = 300
 
-// Safety cap: how many clients one cron invocation will process.
-// Keeps us under the function time limit. When client count grows past this,
-// this loop becomes a queue-drain (find stays, process changes).
 const MAX_CLIENTS_PER_RUN = 5
 
 export async function GET(req: NextRequest) {
-  // --- Auth: reject anything without the cron secret ---
   const secret = process.env.CRON_SECRET
+  const auth = req.headers.get('authorization')
+
+  // TEMP DEBUG: reveal what the server sees. Remove after diagnosis.
+  if (req.nextUrl.searchParams.get('debug') === '1') {
+    return NextResponse.json({
+      serverHasSecret: !!secret,
+      serverSecretLen: secret ? secret.length : 0,
+      serverSecretHead: secret ? secret.slice(0, 6) : null,
+      authHeaderReceived: auth,
+      authHeaderLen: auth ? auth.length : 0,
+      matches: auth === `Bearer ${secret}`,
+    })
+  }
+
   if (secret) {
-    const auth = req.headers.get('authorization')
     if (auth !== `Bearer ${secret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -20,7 +29,6 @@ export async function GET(req: NextRequest) {
 
   const db = adminClient()
 
-  // --- FIND: clients that have at least one active prompt ---
   const { data: activePrompts } = await db
     .from('ai_visibility_prompts')
     .select('client_id')
@@ -29,7 +37,6 @@ export async function GET(req: NextRequest) {
   const clientIds = Array.from(new Set((activePrompts || []).map((p: any) => p.client_id)))
   const batch = clientIds.slice(0, MAX_CLIENTS_PER_RUN)
 
-  // --- PROCESS: run each client through the same shared function ---
   const summary: any[] = []
   for (const clientId of batch) {
     try {
