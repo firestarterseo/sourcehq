@@ -48,6 +48,23 @@ function dataForSeoConfigured() {
   return !!(process.env.DATAFORSEO_B64 || (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD))
 }
 
+function hostOf(url: string) {
+  try { return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase() }
+  catch { return String(url).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase() }
+}
+
+// Tag each cited URL: 'own' (client domain), 'competitor' (matches a named competitor), or null
+function tagCitations(citations: string[], domain: string, competitors: string[]): { url: string; tag: 'own' | 'competitor' | null }[] {
+  const compHosts = competitors.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
+  return (citations || []).map((url) => {
+    const host = hostOf(url)
+    let tag: 'own' | 'competitor' | null = null
+    if (domain && host.includes(domain)) tag = 'own'
+    else if (compHosts.some((c) => host.includes(c.replace(/\s+/g, '')) || c.includes(host.split('.')[0]))) tag = 'competitor'
+    return { url, tag }
+  })
+}
+
 // --- Perplexity: one prompt, returns answer + citations ---
 async function queryPerplexity(prompt: string) {
   const res = await fetch(PERPLEXITY_API, {
@@ -259,7 +276,17 @@ async function recordRun(
         sentiment: parsed.sentiment || 'n/a',
       })
     }
-    results.push({ engine: engineKey, prompt: promptText, mentioned: !!parsed.brand_mentioned, cited, position: parsed.answer_position, score })
+
+    results.push({
+      engine: engineKey,
+      prompt: promptText,
+      mentioned: !!parsed.brand_mentioned,
+      cited,
+      position: parsed.answer_position,
+      score,
+      sentiment: parsed.sentiment || 'n/a',
+      citations: tagCitations(citations, domain, parsed.competitors || []),
+    })
   } catch (err: any) {
     results.push({ engine: engineKey, prompt: promptText, error: err.message })
   }
@@ -300,7 +327,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   const { data: client } = await db.from('clients').select('name, website').eq('id', id).single()
   if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
   const brand = String(client.name).trim()
-  const domain = client.website ? String(client.website).replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase() : ''
+  const domain = client.website ? String(client.website).replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase() : ''
 
   const { data: prompts } = await db
     .from('ai_visibility_prompts')
