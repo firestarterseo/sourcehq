@@ -194,7 +194,7 @@ async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]):
     await sleep(5000)
     try {
       const retry = await runAioBatch(empties, auth, 20)
-      for (const [k, v] of retry) hits.set(k, v)
+      for (const [k, v] of Array.from(retry)) hits.set(k, v)
     } catch {
       // retry is best-effort; keep first-pass hits
     }
@@ -402,3 +402,4 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   return NextResponse.json({ overall, engines: byEngine, count: results.length, aioError, results })
 }
+
