@@ -359,6 +359,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
               <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: absent, display: 'inline-block', marginLeft: '6px' }} />absent
             </span>)}
           </div>
+          </div>
 
           <div style={{ background: '#fff', border, borderRadius: '10px', overflow: 'hidden', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '0.5px solid #F3F4F6', background: '#FAFAF8' }}>
@@ -424,6 +425,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
 
 
 
