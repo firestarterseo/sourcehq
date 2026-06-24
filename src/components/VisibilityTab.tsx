@@ -353,11 +353,11 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
             <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '14px', color: navy }}>Tracked Prompts</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               {manageMode && selected.size > 0 && (<button onClick={removeSelected} style={{ background: '#FCEBEB', color: '#A32D2D', border: '0.5px solid #F0C9C9', borderRadius: '7px', padding: '6px 12px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '12px', cursor: 'pointer' }}>Remove selected ({selected.size})</button>)}
-              <button onClick={() => { setManageMode(!manageMode); setSelected(new Set()); setOpen(null) }} style={{ background: 'transparent', color: violet, border: 'none', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '12px', cursor: 'pointer' }}>{manageMode ? 'Done' : 'Manage'}</button>
               {!manageMode && (<span style={{ fontSize: '12px', color: '#6B7280', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: present, display: 'inline-block' }} />present
               <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: absent, display: 'inline-block', marginLeft: '6px' }} />absent
             </span>)}
+              <button onClick={() => { setManageMode(!manageMode); setSelected(new Set()); setOpen(null) }} style={{ background: 'transparent', color: violet, border: '0.5px solid ' + violet, borderRadius: '7px', padding: '5px 12px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '12px', cursor: 'pointer', marginLeft: '4px' }}>{manageMode ? 'Done' : 'Manage'}</button>
           </div>
           </div>
 
@@ -425,6 +425,8 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
+
 
 
 
