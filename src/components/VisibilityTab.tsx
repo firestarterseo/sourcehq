@@ -71,6 +71,8 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
   const [open, setOpen] = useState<string | null>(null)
+  const [manageMode, setManageMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   function loadHistory() {
     fetch(`/api/clients/${clientId}/ai-visibility`)
@@ -143,6 +145,15 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     loadHistory()
   }
 
+  function toggleSelected(promptId: string) {
+    setSelected(prev => { const next = new Set(prev); if (next.has(promptId)) next.delete(promptId); else next.add(promptId); return next })
+  }
+  async function removeSelected() {
+    for (const promptId of Array.from(selected)) {
+      await fetch(`/api/clients/${clientId}/ai-visibility/prompts`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt_id: promptId }) })
+    }
+    setSelected(new Set()); setManageMode(false); loadHistory()
+  }
   const hasPrompts = prompts && prompts.length > 0
   const allResults = Object.values(latest)
   const liveResults = allResults.filter(r => !r.error)
@@ -340,10 +351,13 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
             <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '14px', color: navy }}>Tracked Prompts</span>
-            <span style={{ fontSize: '12px', color: '#6B7280', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {manageMode && selected.size > 0 && (<button onClick={removeSelected} style={{ background: '#FCEBEB', color: '#A32D2D', border: '0.5px solid #F0C9C9', borderRadius: '7px', padding: '6px 12px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '12px', cursor: 'pointer' }}>Remove selected ({selected.size})</button>)}
+              <button onClick={() => { setManageMode(!manageMode); setSelected(new Set()); setOpen(null) }} style={{ background: 'transparent', color: violet, border: 'none', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '12px', cursor: 'pointer' }}>{manageMode ? 'Done' : 'Manage'}</button>
+              {!manageMode && (<span style={{ fontSize: '12px', color: '#6B7280', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: present, display: 'inline-block' }} />present
               <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: absent, display: 'inline-block', marginLeft: '6px' }} />absent
-            </span>
+            </span>)}
           </div>
 
           <div style={{ background: '#fff', border, borderRadius: '10px', overflow: 'hidden', marginBottom: '20px' }}>
@@ -358,7 +372,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
               return (
                 <div key={p.id} style={{ borderBottom: lastRow ? 'none' : '0.5px solid #F3F4F6' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', gap: '12px' }}>
-                    <div style={{ fontSize: '13px', color: navy, flex: 1 }}>{p.prompt_text}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>{manageMode && (<input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelected(p.id)} style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: violet, flexShrink: 0 }} />)}<span style={{ fontSize: '13px', color: navy }}>{p.prompt_text}</span></div>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                       {ENGINES.map(def => {
                         const lit = def.live && isPresent(def.key, p.prompt_text)
@@ -374,7 +388,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
                           </span>
                         )
                       })}
-                      <button onClick={() => removePrompt(p.id)} title="Remove" style={{ background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '13px', cursor: 'pointer', padding: '2px 4px', marginLeft: '4px' }}>{'x'}</button>
+                      
                     </div>
                   </div>
                   {ENGINES.map(def => {
@@ -410,5 +424,17 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
