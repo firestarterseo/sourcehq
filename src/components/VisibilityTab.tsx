@@ -96,8 +96,10 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     setRunning(true); setError(''); setOpen(null)
     try {
       const res = await fetch(`/api/clients/${clientId}/ai-visibility`, { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Run failed'); setRunning(false); return }
+      const text = await res.text()
+      let data: any = null
+      try { data = JSON.parse(text) } catch {}
+      if (!res.ok || !data) { setError('The check is taking a while. Loading the latest saved results...'); await loadHistory(); setRunning(false); return }
       const map: Record<string, RunResult> = {}
       for (const r of (data.results || [])) map[`${r.engine || 'unknown'}|${r.prompt}`] = r
       setLatest(map)
@@ -106,7 +108,8 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
       if (data.aioError) setError(`AI Overviews note: ${data.aioError}`)
       setLastRun(new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))
     } catch (e: any) {
-      setError(e.message || 'Run failed')
+      await loadHistory()
+      setError('')
     }
     setRunning(false)
   }
@@ -425,6 +428,9 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
+
+
 
 
 
