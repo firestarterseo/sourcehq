@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+﻿import { createClient } from '@supabase/supabase-js'
 
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
 export const PERPLEXITY_MODEL = 'sonar-pro'
@@ -16,17 +16,7 @@ export function adminClient() {
   )
 }
 
-async function runWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
-  let i = 0
-  async function worker() {
-    while (i < items.length) {
-      const idx = i++
-      await fn(items[idx])
-    }
-  }
-  const n = Math.max(1, Math.min(limit, items.length))
-  await Promise.all(Array.from({ length: n }, () => worker()))
-}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function dataForSeoAuth() {
   if (process.env.DATAFORSEO_B64) return `Basic ${process.env.DATAFORSEO_B64}`
@@ -122,6 +112,7 @@ async function queryChatGPT(prompt: string): Promise<{ answer: string; citations
   }
 }
 
+// --- Gemini via generateContent with Google Search grounding: answer + cited URLs ---
 async function queryGemini(prompt: string): Promise<{ answer: string; citations: string[] }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 120000)
@@ -222,6 +213,20 @@ async function queryAIOverview(keyword: string): Promise<{ answer: string; citat
   } finally {
     clearTimeout(timeout)
   }
+}
+
+async function fetchAIOverviews(prompts: { id: string; prompt_text: string }[]): Promise<{ map: Map<string, { answer: string; citations: string[] }>; error: string | null }> {
+  const map = new Map<string, { answer: string; citations: string[] }>()
+  let error: string | null = null
+  for (const p of prompts) {
+    try {
+      map.set(p.id, await queryAIOverview(p.prompt_text))
+    } catch (err: any) {
+      if (!error) error = err.message
+      map.set(p.id, { answer: '', citations: [] })
+    }
+  }
+  return { map, error }
 }
 
 async function parseAnswer(brand: string, prompt: string, answer: string) {
@@ -359,60 +364,48 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
 
   const results: any[] = []
   let aioError: string | null = null
-  const aioOn = dataForSeoConfigured()
 
-  const PROMPT_CONCURRENCY = 4
+  let aioByPrompt: Map<string, { answer: string; citations: string[] }> | null = null
+  if (dataForSeoConfigured()) {
+    const out = await fetchAIOverviews(prompts)
+    aioByPrompt = out.map
+    aioError = out.error
+  }
 
-  async function processPrompt(p: { id: string; prompt_text: string }) {
-    const jobs: Promise<void>[] = []
-
-    jobs.push((async () => {
-      try {
-        const { answer, citations } = await queryPerplexity(p.prompt_text)
-        await recordRun(db, clientId, p.id, p.prompt_text, `perplexity:${PERPLEXITY_MODEL}`, brand, domain, answer, citations, results)
-      } catch (err: any) {
-        results.push({ engine: `perplexity:${PERPLEXITY_MODEL}`, prompt: p.prompt_text, error: err.message })
-      }
-    })())
+  for (const p of prompts) {
+    try {
+      const { answer, citations } = await queryPerplexity(p.prompt_text)
+      await recordRun(db, clientId, p.id, p.prompt_text, `perplexity:${PERPLEXITY_MODEL}`, brand, domain, answer, citations, results)
+    } catch (err: any) {
+      results.push({ engine: `perplexity:${PERPLEXITY_MODEL}`, prompt: p.prompt_text, error: err.message })
+    }
+    await sleep(1000)
 
     if (process.env.OPENAI_API_KEY) {
-      jobs.push((async () => {
-        try {
-          const { answer, citations } = await queryChatGPT(p.prompt_text)
-          await recordRun(db, clientId, p.id, p.prompt_text, `chatgpt:${OPENAI_MODEL}`, brand, domain, answer, citations, results)
-        } catch (err: any) {
-          results.push({ engine: `chatgpt:${OPENAI_MODEL}`, prompt: p.prompt_text, error: err.message })
-        }
-      })())
+      try {
+        const { answer, citations } = await queryChatGPT(p.prompt_text)
+        await recordRun(db, clientId, p.id, p.prompt_text, `chatgpt:${OPENAI_MODEL}`, brand, domain, answer, citations, results)
+      } catch (err: any) {
+        results.push({ engine: `chatgpt:${OPENAI_MODEL}`, prompt: p.prompt_text, error: err.message })
+      }
+      await sleep(1000)
     }
 
     if (process.env.GEMINI_API_KEY) {
-      jobs.push((async () => {
-        try {
-          const { answer, citations } = await queryGemini(p.prompt_text)
-          await recordRun(db, clientId, p.id, p.prompt_text, `gemini:${GEMINI_MODEL}`, brand, domain, answer, citations, results)
-        } catch (err: any) {
-          results.push({ engine: `gemini:${GEMINI_MODEL}`, prompt: p.prompt_text, error: err.message })
-        }
-      })())
+      try {
+        const { answer, citations } = await queryGemini(p.prompt_text)
+        await recordRun(db, clientId, p.id, p.prompt_text, `gemini:${GEMINI_MODEL}`, brand, domain, answer, citations, results)
+      } catch (err: any) {
+        results.push({ engine: `gemini:${GEMINI_MODEL}`, prompt: p.prompt_text, error: err.message })
+      }
+      await sleep(1000)
     }
 
-    if (aioOn) {
-      jobs.push((async () => {
-        try {
-          const { answer, citations } = await queryAIOverview(p.prompt_text)
-          await recordRun(db, clientId, p.id, p.prompt_text, 'google_ai_overviews:dataforseo', brand, domain, answer, citations, results)
-        } catch (err: any) {
-          if (!aioError) aioError = err.message
-          results.push({ engine: 'google_ai_overviews:dataforseo', prompt: p.prompt_text, error: err.message })
-        }
-      })())
+    if (aioByPrompt) {
+      const aio = aioByPrompt.get(p.id) ?? { answer: '', citations: [] }
+      await recordRun(db, clientId, p.id, p.prompt_text, 'google_ai_overviews:dataforseo', brand, domain, aio.answer, aio.citations, results)
     }
-
-    await Promise.allSettled(jobs)
   }
-
-  await runWithConcurrency(prompts, PROMPT_CONCURRENCY, processPrompt)
 
   const scored = results.filter((r) => !r.error)
   const overall = scored.length ? Math.round(scored.reduce((a, r) => a + r.score, 0) / scored.length) : 0
@@ -428,86 +421,4 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
   }
 
   return { ok: true, overall, engines: byEngine, count: results.length, aioError, results }
-}
-
-// ============================================================
-// Phase 1: process a single queued job (one prompt x one engine)
-// ============================================================
-
-async function queryOneEngine(engine: string, promptText: string): Promise<{ answer: string; citations: string[] }> {
-  if (engine.startsWith('perplexity:')) return queryPerplexity(promptText)
-  if (engine.startsWith('chatgpt:')) return queryChatGPT(promptText)
-  if (engine.startsWith('gemini:')) return queryGemini(promptText)
-  if (engine.startsWith('google_ai_overviews:')) return queryAIOverview(promptText)
-  throw new Error(`Unknown engine: ${engine}`)
-}
-
-async function recomputeBatch(db: any, batchId: string) {
-  const { data: batch } = await db.from('ai_visibility_batches').select('total_jobs').eq('id', batchId).single()
-  if (!batch) return
-  const { count: doneCount } = await db.from('ai_visibility_jobs').select('*', { count: 'exact', head: true }).eq('batch_id', batchId).eq('status', 'done')
-  const { count: errCount } = await db.from('ai_visibility_jobs').select('*', { count: 'exact', head: true }).eq('batch_id', batchId).eq('status', 'error')
-  const d = doneCount || 0
-  const e = errCount || 0
-  const finished = d + e >= (batch.total_jobs || 0)
-  await db.from('ai_visibility_batches').update({
-    completed_jobs: d,
-    error_jobs: e,
-    status: finished ? (d === 0 ? 'error' : 'done') : 'running',
-    finished_at: finished ? new Date().toISOString() : null,
-  }).eq('id', batchId)
-}
-
-export async function processVisibilityJob(db: any, jobId: string): Promise<{ ok: boolean; status: string; runId?: string; error?: string }> {
-  const { data: job } = await db.from('ai_visibility_jobs').select('*').eq('id', jobId).single()
-  if (!job) return { ok: false, status: 'missing', error: 'Job not found' }
-  if (job.status === 'done') return { ok: true, status: 'done', runId: job.run_id }
-
-  const { data: prompt } = await db.from('ai_visibility_prompts').select('prompt_text').eq('id', job.prompt_id).single()
-  const { data: client } = await db.from('clients').select('name, website').eq('id', job.client_id).single()
-  if (!prompt || !client) {
-    await db.from('ai_visibility_jobs').update({ status: 'error', error: 'Prompt or client missing', attempts: (job.attempts || 0) + 1, finished_at: new Date().toISOString() }).eq('id', jobId)
-    await recomputeBatch(db, job.batch_id)
-    return { ok: false, status: 'error', error: 'Prompt or client missing' }
-  }
-
-  const brand = String(client.name).trim()
-  const domain = client.website ? String(client.website).replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase() : ''
-
-  await db.from('ai_visibility_jobs').update({ status: 'running', started_at: new Date().toISOString(), attempts: (job.attempts || 0) + 1 }).eq('id', jobId)
-
-  try {
-    const { answer, citations } = await queryOneEngine(job.engine, prompt.prompt_text)
-    const cited = domain ? citations.some((u) => String(u).toLowerCase().includes(domain)) : false
-    const parsed = answer
-      ? await parseAnswer(brand, prompt.prompt_text, answer)
-      : { brand_mentioned: false, answer_position: 0, total_named: 0, competitors: [], sentiment: 'n/a' }
-    const score = scoreResult(parsed, cited)
-
-    const { data: run } = await db
-      .from('ai_visibility_runs')
-      .insert({ client_id: job.client_id, org_id: job.org_id, prompt_id: job.prompt_id, engine: job.engine, raw_answer: answer, citations, score })
-      .select('id')
-      .single()
-
-    if (run) {
-      await db.from('ai_visibility_mentions').insert({
-        run_id: run.id,
-        brand_mentioned: !!parsed.brand_mentioned,
-        brand_cited: cited,
-        answer_position: Number(parsed.answer_position) || 0,
-        total_named: Number(parsed.total_named) || 0,
-        competitors: parsed.competitors || [],
-        sentiment: parsed.sentiment || 'n/a',
-      })
-    }
-
-    await db.from('ai_visibility_jobs').update({ status: 'done', run_id: run?.id ?? null, finished_at: new Date().toISOString() }).eq('id', jobId)
-    await recomputeBatch(db, job.batch_id)
-    return { ok: true, status: 'done', runId: run?.id }
-  } catch (err: any) {
-    await db.from('ai_visibility_jobs').update({ status: 'error', error: String(err.message).slice(0, 500), finished_at: new Date().toISOString() }).eq('id', jobId)
-    await recomputeBatch(db, job.batch_id)
-    return { ok: false, status: 'error', error: err.message }
-  }
 }
