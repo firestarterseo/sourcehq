@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 
@@ -64,6 +64,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   const [overall, setOverall] = useState<number | null>(null)
   const [lastRun, setLastRun] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [suggesting, setSuggesting] = useState(false)
   const [suggestNote, setSuggestNote] = useState('')
@@ -93,25 +94,40 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   useEffect(() => { loadHistory() }, [clientId])
 
   async function runCheck() {
-    setRunning(true); setError(''); setOpen(null)
+    setRunning(true); setError(''); setOpen(null); setProgress(null)
     try {
       const res = await fetch(`/api/clients/${clientId}/ai-visibility`, { method: 'POST' })
-      const text = await res.text()
-      let data: any = null
-      try { data = JSON.parse(text) } catch {}
-      if (!res.ok || !data) { setError('The check is taking a while. Loading the latest saved results...'); await loadHistory(); setRunning(false); return }
-      const map: Record<string, RunResult> = {}
-      for (const r of (data.results || [])) map[`${r.engine || 'unknown'}|${r.prompt}`] = r
-      setLatest(map)
-      setEngines(data.engines || {})
-      setOverall(data.overall ?? null)
-      if (data.aioError) setError(`AI Overviews note: ${data.aioError}`)
-      setLastRun(new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data || !data.batchId) {
+        setError('Could not start the check. Please try again.')
+        setRunning(false)
+        return
+      }
+      const batchId = data.batchId
+      setProgress({ done: 0, total: data.totalJobs || 0 })
+      const poll = async (): Promise<void> => {
+        try {
+          const sr = await fetch(`/api/clients/${clientId}/ai-visibility/batch?batchId=${batchId}`)
+          const sd = await sr.json().catch(() => null)
+          const b = sd?.batch
+          if (b) {
+            setProgress({ done: b.done, total: b.total })
+            if (b.status === 'done' || b.status === 'error' || (b.total > 0 && b.done >= b.total)) {
+              await loadHistory()
+              setRunning(false)
+              setProgress(null)
+              return
+            }
+          }
+        } catch {}
+        setTimeout(poll, 3000)
+      }
+      setTimeout(poll, 2500)
     } catch (e: any) {
-      await loadHistory()
-      setError('')
+      setError('Could not start the check. Please try again.')
+      setRunning(false)
+      setProgress(null)
     }
-    setRunning(false)
   }
 
   async function getSuggestions() {
@@ -283,7 +299,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
         </div>
         {hasRuns && (
           <button onClick={runCheck} disabled={running} style={{ background: running ? '#9CA3AF' : violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
-            {running ? 'Running...' : 'Re-run Check'}
+            {running ? (progress && progress.total ? 'Running... ' + progress.done + '/' + progress.total : 'Running...') : 'Re-run Check'}
           </button>
         )}
       </div>
@@ -325,7 +341,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
                 ))}
               </div>
               <button onClick={runCheck} disabled={running || promptCount === 0} style={{ width: '100%', background: running ? '#9CA3AF' : violet, color: '#fff', border: 'none', borderRadius: '8px', padding: '12px 16px', fontFamily: 'DM Sans, sans-serif', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-                {running ? 'Running first check... this can take a few minutes' : `Check Visibility (${promptCount} prompt${promptCount === 1 ? '' : 's'})`}
+                {running ? (progress && progress.total ? 'Running checks... ' + progress.done + ' of ' + progress.total : 'Running first check...') : `Check Visibility (${promptCount} prompt${promptCount === 1 ? '' : 's'})`}
               </button>
             </div>
           </div>
