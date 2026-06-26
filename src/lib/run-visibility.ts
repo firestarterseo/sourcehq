@@ -150,15 +150,33 @@ async function queryGemini(prompt: string): Promise<{ answer: string; citations:
     if (Array.isArray(parts)) {
       answer = parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).filter(Boolean).join('\n\n')
     }
-    const refs: string[] = []
+    const rawRefs: { uri: string; title: string }[] = []
     const chunks = cand?.groundingMetadata?.groundingChunks
     if (Array.isArray(chunks)) {
       for (const ch of chunks) {
         const uri = ch?.web?.uri
-        if (uri) refs.push(String(uri))
+        if (uri) rawRefs.push({ uri: String(uri), title: String(ch?.web?.title || '') })
       }
     }
-    return { answer, citations: Array.from(new Set(refs)) }
+    const resolved = await Promise.all(
+      rawRefs.map(async (r) => {
+        if (r.uri.includes('vertexaisearch.cloud.google.com')) {
+          try {
+            const rc = new AbortController()
+            const rt = setTimeout(() => rc.abort(), 8000)
+            try {
+              const resp = await fetch(r.uri, { method: 'GET', redirect: 'follow', signal: rc.signal })
+              if (resp.url && !resp.url.includes('vertexaisearch.cloud.google.com')) return resp.url
+            } finally {
+              clearTimeout(rt)
+            }
+          } catch {}
+          if (r.title && /\./.test(r.title) && !/\s/.test(r.title)) return `https://${r.title}`
+        }
+        return r.uri
+      })
+    )
+    return { answer, citations: Array.from(new Set(resolved)) }
   } finally {
     clearTimeout(timeout)
   }
