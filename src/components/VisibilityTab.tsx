@@ -308,6 +308,25 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
 
       {!prompts ? (
         <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading...</p>
+      ) : running ? (
+        <div style={{ background: '#fff', border, borderRadius: '12px', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ maxWidth: '420px', margin: '0 auto' }}>
+            <div style={{ width: '40px', height: '40px', margin: '0 auto 20px', border: '3px solid #EDE9FE', borderTopColor: violet, borderRadius: '50%', animation: 'vspin 0.8s linear infinite' }} />
+            <style>{'@keyframes vspin { to { transform: rotate(360deg) } }'}</style>
+            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '16px', color: navy, margin: '0 0 8px' }}>Running visibility checks</h3>
+            <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 0 18px', lineHeight: 1.6 }}>
+              Querying each AI engine for every prompt. This usually takes a couple of minutes. You can keep this tab open.
+            </p>
+            {progress && progress.total > 0 && (
+              <>
+                <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '22px', color: navy, marginBottom: '10px' }}>{progress.done} of {progress.total}</div>
+                <div style={{ height: '8px', borderRadius: '4px', background: '#F1EFE8', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.round(progress.done / progress.total * 100)}%`, height: '100%', background: violet, transition: 'width 0.4s ease' }} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       ) : inSetup ? (
         <div style={{ background: '#fff', border, borderRadius: '12px', padding: '28px 24px' }}>
           <div style={{ maxWidth: '560px', margin: '0 auto' }}>
