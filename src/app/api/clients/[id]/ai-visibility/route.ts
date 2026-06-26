@@ -1,7 +1,7 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { adminClient, dataForSeoConfigured, tagCitations, runClientVisibility } from '@/lib/run-visibility'
+import { adminClient, dataForSeoConfigured, tagCitations, enqueueClientVisibility } from '@/lib/run-visibility'
 
 export const maxDuration = 300
 
@@ -112,15 +112,9 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   const db = adminClient()
-  const outcome = await runClientVisibility(db, id)
+  const outcome = await enqueueClientVisibility(db, id, 'manual')
   if (!outcome.ok) {
     return NextResponse.json({ error: outcome.error }, { status: outcome.error === 'Client not found' ? 404 : 400 })
   }
-  return NextResponse.json({
-    overall: outcome.overall,
-    engines: outcome.engines,
-    count: outcome.count,
-    aioError: outcome.aioError,
-    results: outcome.results,
-  })
+  return NextResponse.json({ batchId: outcome.batchId, totalJobs: outcome.totalJobs, queued: true })
 }

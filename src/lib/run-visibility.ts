@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { Client as QStashClient } from '@upstash/qstash'
 
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
 export const PERPLEXITY_MODEL = 'sonar-pro'
@@ -510,4 +511,85 @@ export async function processVisibilityJob(db: any, jobId: string): Promise<{ ok
     await recomputeBatch(db, job.batch_id)
     return { ok: false, status: 'error', error: err.message }
   }
+}
+
+// ============================================================
+// Phase 2: enqueue a batch of jobs and publish them to QStash
+// ============================================================
+
+function enginesForEnv(): string[] {
+  const engines = [`perplexity:${PERPLEXITY_MODEL}`]
+  if (process.env.OPENAI_API_KEY) engines.push(`chatgpt:${OPENAI_MODEL}`)
+  if (process.env.GEMINI_API_KEY) engines.push(`gemini:${GEMINI_MODEL}`)
+  if (dataForSeoConfigured()) engines.push('google_ai_overviews:dataforseo')
+  return engines
+}
+
+export type EnqueueOutcome = {
+  ok: boolean
+  error?: string
+  batchId?: string
+  totalJobs?: number
+}
+
+export async function enqueueClientVisibility(db: any, clientId: string, trigger: string = 'manual'): Promise<EnqueueOutcome> {
+  const { data: client } = await db.from('clients').select('id, org_id').eq('id', clientId).single()
+  if (!client) return { ok: false, error: 'Client not found' }
+
+  const { data: prompts } = await db
+    .from('ai_visibility_prompts')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('active', true)
+
+  if (!prompts || prompts.length === 0) {
+    return { ok: false, error: 'No active prompts for this client.' }
+  }
+
+  const engines = enginesForEnv()
+  const totalJobs = prompts.length * engines.length
+
+  const { data: batch, error: batchErr } = await db
+    .from('ai_visibility_batches')
+    .insert({ client_id: clientId, org_id: client.org_id, trigger, status: 'pending', total_jobs: totalJobs })
+    .select('id')
+    .single()
+  if (batchErr || !batch) return { ok: false, error: `Failed to create batch: ${batchErr?.message || 'unknown'}` }
+
+  const jobRows: any[] = []
+  for (const p of prompts) {
+    for (const engine of engines) {
+      jobRows.push({
+        batch_id: batch.id,
+        client_id: clientId,
+        org_id: client.org_id,
+        prompt_id: p.id,
+        engine,
+        status: 'pending',
+      })
+    }
+  }
+
+  const { data: insertedJobs, error: jobsErr } = await db
+    .from('ai_visibility_jobs')
+    .insert(jobRows)
+    .select('id')
+  if (jobsErr || !insertedJobs) return { ok: false, error: `Failed to create jobs: ${jobsErr?.message || 'unknown'}` }
+
+  const token = process.env.QSTASH_TOKEN
+  if (!token) return { ok: false, error: 'QSTASH_TOKEN not configured' }
+  const qstash = new QStashClient({ token })
+  const workerUrl = `${process.env.WORKER_BASE_URL || 'https://sourcehq.vercel.app'}/api/jobs/visibility`
+
+  await Promise.allSettled(
+    insertedJobs.map((j: any) =>
+      qstash.publishJSON({
+        url: workerUrl,
+        body: { jobId: j.id },
+        retries: 2,
+      })
+    )
+  )
+
+  return { ok: true, batchId: batch.id, totalJobs }
 }
