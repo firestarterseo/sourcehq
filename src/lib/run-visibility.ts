@@ -580,7 +580,7 @@ export async function enqueueClientVisibility(db: any, clientId: string, trigger
 
   const token = process.env.QSTASH_TOKEN
   if (!token) return { ok: false, error: 'QSTASH_TOKEN not configured' }
-  const qstash = new QStashClient({ token, baseUrl: 'https://qstash.upstash.io' })
+  const qstash = new QStashClient({ token, baseUrl: 'https://qstash-us-east-1.upstash.io' })
   const workerUrl = `${process.env.WORKER_BASE_URL || 'https://sourcehq.vercel.app'}/api/jobs/visibility`
 
   const pubResults = await Promise.allSettled(
