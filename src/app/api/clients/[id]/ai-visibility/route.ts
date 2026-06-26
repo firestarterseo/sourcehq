@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { adminClient, dataForSeoConfigured, tagCitations, enqueueClientVisibility } from '@/lib/run-visibility'
 
-export const maxDuration = 300
+export const maxDuration = 800
 
 async function getSession() {
   const cookieStore = await cookies()

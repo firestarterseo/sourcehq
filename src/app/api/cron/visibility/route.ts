@@ -1,7 +1,7 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { adminClient, runClientVisibility } from '@/lib/run-visibility'
 
-export const maxDuration = 300
+export const maxDuration = 800
 
 const MAX_CLIENTS_PER_RUN = 5
 
