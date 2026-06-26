@@ -583,9 +583,12 @@ export async function enqueueClientVisibility(db: any, clientId: string, trigger
   const qstash = new QStashClient({ token, baseUrl: 'https://qstash-us-east-1.upstash.io' })
   const workerUrl = `${process.env.WORKER_BASE_URL || 'https://sourcehq.vercel.app'}/api/jobs/visibility`
 
+  const queue = qstash.queue({ queueName: 'visibility-jobs' })
+  await queue.upsert({ parallelism: 3 })
+
   const pubResults = await Promise.allSettled(
     insertedJobs.map((j: any) =>
-      qstash.publishJSON({
+      queue.enqueueJSON({
         url: workerUrl,
         body: { jobId: j.id },
         retries: 2,
