@@ -116,5 +116,5 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   if (!outcome.ok) {
     return NextResponse.json({ error: outcome.error }, { status: outcome.error === 'Client not found' ? 404 : 400 })
   }
-  return NextResponse.json({ batchId: outcome.batchId, totalJobs: outcome.totalJobs, queued: true })
+  return NextResponse.json({ batchId: outcome.batchId, totalJobs: outcome.totalJobs, published: outcome.published, publishError: outcome.publishError, queued: true })
 }

@@ -530,6 +530,8 @@ export type EnqueueOutcome = {
   error?: string
   batchId?: string
   totalJobs?: number
+  published?: number
+  publishError?: string
 }
 
 export async function enqueueClientVisibility(db: any, clientId: string, trigger: string = 'manual'): Promise<EnqueueOutcome> {
@@ -578,10 +580,10 @@ export async function enqueueClientVisibility(db: any, clientId: string, trigger
 
   const token = process.env.QSTASH_TOKEN
   if (!token) return { ok: false, error: 'QSTASH_TOKEN not configured' }
-  const qstash = new QStashClient({ token })
+  const qstash = new QStashClient({ token, baseUrl: 'https://qstash.upstash.io' })
   const workerUrl = `${process.env.WORKER_BASE_URL || 'https://sourcehq.vercel.app'}/api/jobs/visibility`
 
-  await Promise.allSettled(
+  const pubResults = await Promise.allSettled(
     insertedJobs.map((j: any) =>
       qstash.publishJSON({
         url: workerUrl,
@@ -590,6 +592,8 @@ export async function enqueueClientVisibility(db: any, clientId: string, trigger
       })
     )
   )
+  const pubFailures = pubResults.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
+  const publishError = pubFailures.length ? String(pubFailures[0].reason?.message || pubFailures[0].reason).slice(0, 300) : undefined
 
-  return { ok: true, batchId: batch.id, totalJobs }
+  return { ok: true, batchId: batch.id, totalJobs, published: insertedJobs.length - pubFailures.length, publishError }
 }
