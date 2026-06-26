@@ -583,16 +583,9 @@ export async function enqueueClientVisibility(db: any, clientId: string, trigger
   const qstash = new QStashClient({ token, baseUrl: 'https://qstash-us-east-1.upstash.io' })
   const workerUrl = `${process.env.WORKER_BASE_URL || 'https://sourcehq.vercel.app'}/api/jobs/visibility`
 
-  const queue = qstash.queue({ queueName: 'visibility-jobs' })
-  await queue.upsert({ parallelism: 3 })
-
   const pubResults = await Promise.allSettled(
-    insertedJobs.map((j: any) =>
-      queue.enqueueJSON({
-        url: workerUrl,
-        body: { jobId: j.id },
-        retries: 2,
-      })
+    insertedJobs.map((j: any, idx: number) =>
+      qstash.publishJSON({ url: workerUrl, body: { jobId: j.id }, retries: 2, delay: idx * 2 })
     )
   )
   const pubFailures = pubResults.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
