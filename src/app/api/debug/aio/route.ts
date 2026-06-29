@@ -1,8 +1,9 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { adminClient } from '@/lib/run-visibility'
 
-export const maxDuration = 120
+export const maxDuration = 30
 
 export async function GET(req: NextRequest) {
   const cookieStore = await cookies()
@@ -22,46 +23,50 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   const url = new URL(req.url)
-  const keyword = url.searchParams.get('keyword') || ''
-  if (!keyword) return NextResponse.json({ error: 'Missing keyword param' }, { status: 400 })
+  const clientId = url.searchParams.get('client_id') || 'bb0b88d0-0cbf-46af-805e-10ee1b9c2e47'
 
-  const country = url.searchParams.get('country') || 'US'
-  const apiKey = process.env.CLORO_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'CLORO_API_KEY not configured' }, { status: 500 })
+  const db = adminClient()
+  const { data: runs } = await db
+    .from('ai_visibility_runs')
+    .select('id, engine, prompt_id, score, citations, run_at')
+    .eq('client_id', clientId)
+    .order('run_at', { ascending: false })
+    .limit(60)
 
-  const started = Date.now()
-  const res = await fetch('https://api.cloro.dev/v1/monitor/google', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query: keyword,
-      country,
-      include: { aioverview: { markdown: true } },
-    }),
+  const { data: prompts } = await db
+    .from('ai_visibility_prompts')
+    .select('id, prompt_text')
+    .eq('client_id', clientId)
+  const promptMap = new Map((prompts || []).map((p: any) => [p.id, p.prompt_text]))
+
+  const runIds = (runs || []).map((r: any) => r.id)
+  const { data: mentions } = await db
+    .from('ai_visibility_mentions')
+    .select('run_id, brand_mentioned, brand_cited, answer_position, total_named, sentiment')
+    .in('run_id', runIds.length ? runIds : ['00000000-0000-0000-0000-000000000000'])
+  const mentionMap = new Map((mentions || []).map((m: any) => [m.run_id, m]))
+
+  const rows = (runs || []).map((r: any) => {
+    const m = mentionMap.get(r.id)
+    return {
+      run_at: r.run_at,
+      engine: r.engine,
+      prompt: promptMap.get(r.prompt_id) || '(unknown)',
+      score: r.score,
+      citations_count: Array.isArray(r.citations) ? r.citations.length : 0,
+      mentioned: m ? !!m.brand_mentioned : null,
+      cited: m ? !!m.brand_cited : null,
+      position: m ? m.answer_position : null,
+    }
   })
-  const elapsed_ms = Date.now() - started
 
-  if (!res.ok) {
-    const body = await res.text()
-    return NextResponse.json({ error: `cloro ${res.status}`, body: body.slice(0, 2000), elapsed_ms }, { status: 500 })
-  }
-  const data = await res.json()
-  const aio = data?.result?.aioverview ?? null
-  const sources = Array.isArray(aio?.sources) ? aio.sources : []
+  const engineCounts: Record<string, number> = {}
+  for (const r of rows) engineCounts[r.engine] = (engineCounts[r.engine] || 0) + 1
 
   return NextResponse.json({
-    keyword,
-    country,
-    elapsed_ms,
-    success: data?.success === true,
-    has_aioverview: !!aio,
-    aioverview_text_length: typeof aio?.text === 'string' ? aio.text.length : 0,
-    aioverview_markdown_length: typeof aio?.markdown === 'string' ? aio.markdown.length : 0,
-    sources_count: sources.length,
-    source_urls: sources.map((s: any) => s?.url).filter(Boolean),
-    aioverview_raw: aio,
+    client_id: clientId,
+    total_recent_runs: rows.length,
+    engine_counts_in_recent_runs: engineCounts,
+    rows,
   })
 }
