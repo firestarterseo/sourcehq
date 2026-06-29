@@ -22,6 +22,22 @@ async function getSession() {
   return supabase.auth.getSession()
 }
 
+// Fetch mentions in safe batches to avoid PostgREST URL-length limits.
+async function fetchMentionsBatched(db: any, runIds: string[]) {
+  const out = new Map<string, any>()
+  const BATCH = 100
+  for (let i = 0; i < runIds.length; i += BATCH) {
+    const slice = runIds.slice(i, i + BATCH)
+    const { data, error } = await db
+      .from('ai_visibility_mentions')
+      .select('run_id, brand_mentioned, brand_cited, answer_position, total_named, competitors, sentiment')
+      .in('run_id', slice)
+    if (error) continue
+    for (const m of data || []) out.set(m.run_id, m)
+  }
+  return out
+}
+
 // --- GET: return the latest stored result per prompt+engine, ready to render ---
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -38,24 +54,21 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .select('id, prompt_text, intent_tag, active')
     .eq('client_id', id)
 
+  // Window the runs query to the last 30 days. Two weekly cycles of headroom,
+  // bounded as the table grows. Latest-per-pair is derived in JS below.
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const { data: runs } = await db
     .from('ai_visibility_runs')
     .select('id, prompt_id, engine, run_at, score, citations')
     .eq('client_id', id)
+    .gte('run_at', cutoff)
     .order('run_at', { ascending: true })
 
   const promptText = new Map<string, string>((prompts || []).map((p: any) => [p.id, p.prompt_text]))
 
-  const runIds = (runs || []).map((r: any) => r.id)
-  const mentionsByRun = new Map<string, any>()
-  if (runIds.length) {
-    const { data: mentions } = await db
-      .from('ai_visibility_mentions')
-      .select('run_id, brand_mentioned, brand_cited, answer_position, total_named, competitors, sentiment')
-      .in('run_id', runIds)
-    for (const m of mentions || []) mentionsByRun.set(m.run_id, m)
-  }
-
+  // Reduce runs to latest-per-pair BEFORE fetching mentions, so we only join
+  // mentions for the rows that will actually render. Cuts mention IN-list to
+  // engines x prompts (tens), not the full history (hundreds-thousands).
   const latestByPair = new Map<string, any>()
   let lastRunAt: string | null = null
   for (const run of runs || []) {
@@ -64,8 +77,12 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     if (!lastRunAt || run.run_at > lastRunAt) lastRunAt = run.run_at
   }
 
+  const latestRuns = Array.from(latestByPair.values())
+  const runIds = latestRuns.map((r: any) => r.id)
+  const mentionsByRun = runIds.length ? await fetchMentionsBatched(db, runIds) : new Map<string, any>()
+
   const results: any[] = []
-  for (const run of Array.from(latestByPair.values())) {
+  for (const run of latestRuns) {
     const m = mentionsByRun.get(run.id)
     const mentioned = !!(m && m.brand_mentioned)
     const cited = !!(m && m.brand_cited)
@@ -105,7 +122,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   })
 }
 
-// --- POST: run a visibility check now (thin wrapper over the shared run function) ---
+// --- POST: enqueue a visibility batch via QStash ---
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: { session } } = await getSession()
