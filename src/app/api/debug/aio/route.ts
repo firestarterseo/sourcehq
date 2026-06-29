@@ -1,4 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 export const maxDuration = 90
 
@@ -39,12 +41,23 @@ function parseAIOResult(result: any): { answer: string; citations: string[] } {
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url)
-  const bearer = url.searchParams.get('bearer') || ''
-  if (!bearer || bearer !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
+        },
+      },
+    }
+  )
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
+  const url = new URL(req.url)
   const keyword = url.searchParams.get('keyword') || ''
   if (!keyword) return NextResponse.json({ error: 'Missing keyword param' }, { status: 400 })
 
@@ -89,3 +102,5 @@ export async function GET(req: NextRequest) {
     ai_overview_raw: aioItem,
   })
 }
+
+
