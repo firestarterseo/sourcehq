@@ -52,6 +52,16 @@ function EngineGlyph({ def, color, size = 18 }: { def: EngineDef; color: string;
   )
 }
 
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }} className="vt-infotip">
+      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '13px', height: '13px', borderRadius: '50%', border: '0.5px solid #B4B2A9', color: '#6B7280', fontSize: '9px', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, cursor: 'help' }}>i</span>
+      <span className="vt-infotip-bubble" style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', background: '#0D1B3E', color: '#fff', fontSize: '11px', fontFamily: 'DM Sans, sans-serif', fontWeight: 400, padding: '8px 10px', borderRadius: '6px', whiteSpace: 'normal', width: '220px', lineHeight: 1.4, opacity: 0, pointerEvents: 'none', transition: 'opacity 0.15s', zIndex: 10, textAlign: 'left' }}>{text}</span>
+      <style>{'.vt-infotip:hover .vt-infotip-bubble { opacity: 1 !important; }'}</style>
+    </span>
+  )
+}
+
 function fmtTime(iso: string) {
   try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }
   catch { return '' }
@@ -369,12 +379,12 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
             <div style={{ background: lavender, borderRadius: '10px', padding: '14px' }}>
-              <div style={{ fontSize: '11.5px', color: violet, fontWeight: '500' }}>Overall Score</div>
+              <div style={{ fontSize: '11.5px', color: violet, fontWeight: '500', display: 'flex', alignItems: 'center', gap: '5px' }}>Overall Score<InfoTip text="Average score across every prompt by engine combination. 100 = cited in position 1, 80 = cited in lower positions, 50 = mentioned but not cited, 0 = absent." /></div>
               <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{overall ?? '-'}{overall != null && <span style={{ fontSize: '14px', color: '#9CA3AF', fontWeight: '500' }}>/100</span>}</div>
             </div>
-            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Mention Rate</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{mentionRate != null ? mentionRate + '%' : '-'}</div></div>
-            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Citation Rate</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{citeRate != null ? citeRate + '%' : '-'}</div></div>
-            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280' }}>Prompts Tracked</div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{promptCount}</div></div>
+            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '5px' }}>Mention Rate<InfoTip text="Percentage of prompt by engine runs where the brand is named anywhere in the answer, cited or not." /></div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{mentionRate != null ? mentionRate + '%' : '-'}</div></div>
+            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '5px' }}>Citation Rate<InfoTip text="Percentage of prompt by engine runs where the brand's website is linked as a source in the answer." /></div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{citeRate != null ? citeRate + '%' : '-'}</div></div>
+            <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '5px' }}>Prompts Tracked<InfoTip text="Number of prompts actively monitored for this client across all engines." /></div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{promptCount}</div></div>
           </div>
 
           <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '14px', color: navy, margin: '0 0 8px' }}>Search-feature engines</div>
@@ -463,6 +473,9 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
+
+
 
 
 
