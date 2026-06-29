@@ -10,8 +10,8 @@ interface EngineStat { overall: number; count: number }
 const navy = '#0D1B3E'
 const violet = '#6D28D9'
 const lavender = '#EDE9FE'
-const gold = '#BA7517'
-const grey = '#B4B2A9'
+const gold = '#1D9E75'
+const grey = '#A8DCC5'
 const present = '#1D9E75'
 const absent = '#D3D1C7'
 const border = '0.5px solid #E5E5E3'
@@ -463,6 +463,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
 
 
 
