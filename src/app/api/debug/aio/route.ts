@@ -102,5 +102,3 @@ export async function GET(req: NextRequest) {
     ai_overview_raw: aioItem,
   })
 }
-
-
