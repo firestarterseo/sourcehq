@@ -67,6 +67,122 @@ function fmtTime(iso: string) {
   catch { return '' }
 }
 
+const ENGINE_COLORS: Record<string, string> = {
+  'google_ai_overviews:cloro': '#1D9E75',
+  'google_ai_mode:cloro': '#0E7C5C',
+  'chatgpt:gpt-5.4-mini': '#10A37F',
+  'gemini:gemini-3.5-flash': '#4285F4',
+  'perplexity:sonar-pro': '#6D28D9',
+  'grok:cloro': '#000000',
+  'copilot:cloro': '#0078D4',
+}
+const ENGINE_LABELS: Record<string, string> = {
+  'google_ai_overviews:cloro': 'Google AIO',
+  'google_ai_mode:cloro': 'AI Mode',
+  'chatgpt:gpt-5.4-mini': 'ChatGPT',
+  'gemini:gemini-3.5-flash': 'Gemini',
+  'perplexity:sonar-pro': 'Perplexity',
+  'grok:cloro': 'Grok',
+  'copilot:cloro': 'Copilot',
+}
+
+function TrendChart({ data, weeks, onWeeksChange, loading }: { data: { week_labels: string[]; series: { engine: string; points: { week: string; score: number | null }[] }[]; total_runs: number } | null; weeks: number; onWeeksChange: (w: number) => void; loading: boolean }) {
+  const W = 720
+  const H = 220
+  const padL = 36, padR = 16, padT = 16, padB = 28
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+
+  const weekLabels = data?.week_labels || []
+  const series = data?.series || []
+  const hasPoints = weekLabels.length > 0 && series.some(s => s.points.some(p => p.score != null))
+
+  function x(i: number) {
+    if (weekLabels.length <= 1) return padL + innerW / 2
+    return padL + (i / (weekLabels.length - 1)) * innerW
+  }
+  function y(score: number) {
+    return padT + innerH - (score / 100) * innerH
+  }
+
+  function pathFor(points: { score: number | null }[]) {
+    let d = ''
+    let started = false
+    points.forEach((p, i) => {
+      if (p.score == null) { started = false; return }
+      const cmd = started ? 'L' : 'M'
+      d += `${cmd}${x(i).toFixed(1)},${y(p.score).toFixed(1)} `
+      started = true
+    })
+    return d.trim()
+  }
+
+  const navy = '#0D1B3E'
+  const muted = '#6B7280'
+
+  const ranges = [
+    { label: '4w', value: 4 },
+    { label: '8w', value: 8 },
+    { label: '13w', value: 13 },
+    { label: '26w', value: 26 },
+    { label: '52w', value: 52 },
+    { label: 'All', value: 520 },
+  ]
+
+  return (
+    <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '16px 18px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '14px', color: navy }}>Visibility over time, by engine</div>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {ranges.map(r => (
+            <button key={r.value} onClick={() => onWeeksChange(r.value)} style={{ background: weeks === r.value ? '#EDE9FE' : '#fff', border: '0.5px solid ' + (weeks === r.value ? '#6D28D9' : '#E5E5E3'), color: weeks === r.value ? '#6D28D9' : muted, borderRadius: '6px', padding: '4px 10px', fontFamily: 'DM Sans, sans-serif', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}>{r.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {!hasPoints ? (
+        <div style={{ padding: '40px 16px', textAlign: 'center', color: muted, fontSize: '13px' }}>
+          {loading ? 'Loading...' : 'Not enough data yet. Trend fills in as weekly runs accumulate.'}
+        </div>
+      ) : (
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+          {[0, 25, 50, 75, 100].map(g => (
+            <g key={g}>
+              <line x1={padL} y1={y(g)} x2={padL + innerW} y2={y(g)} stroke="#F1EFE8" strokeWidth="1" />
+              <text x={padL - 6} y={y(g) + 3} fontSize="10" fill={muted} textAnchor="end" fontFamily="DM Sans, sans-serif">{g}</text>
+            </g>
+          ))}
+          {weekLabels.map((wk, i) => {
+            if (weekLabels.length > 12 && i % Math.ceil(weekLabels.length / 8) !== 0) return null
+            const d = new Date(wk)
+            const lbl = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
+            return <text key={wk} x={x(i)} y={H - 8} fontSize="10" fill={muted} textAnchor="middle" fontFamily="DM Sans, sans-serif">{lbl}</text>
+          })}
+          {series.map(s => {
+            const color = ENGINE_COLORS[s.engine] || '#999'
+            return (
+              <g key={s.engine}>
+                <path d={pathFor(s.points)} stroke={color} strokeWidth="2" fill="none" strokeLinejoin="round" />
+                {s.points.map((p, i) => p.score != null ? <circle key={i} cx={x(i)} cy={y(p.score)} r="3" fill={color} /> : null)}
+              </g>
+            )
+          })}
+        </svg>
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '0.5px solid #F3F4F6' }}>
+        {series.map(s => (
+          <span key={s.engine} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: muted }}>
+            <span style={{ width: '10px', height: '2px', background: ENGINE_COLORS[s.engine] || '#999', display: 'inline-block' }} />
+            {ENGINE_LABELS[s.engine] || s.engine}
+          </span>
+        ))}
+      </div>
+      <div style={{ marginTop: '8px', fontSize: '11px', color: '#9CA3AF' }}>Data accumulates with each weekly run.</div>
+    </div>
+  )
+}
+
 export default function VisibilityTab({ clientId }: { clientId: string }) {
   const [prompts, setPrompts] = useState<Prompt[] | null>(null)
   const [latest, setLatest] = useState<Record<string, RunResult>>({})
@@ -84,6 +200,9 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   const [open, setOpen] = useState<string | null>(null)
   const [manageMode, setManageMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [trendWeeks, setTrendWeeks] = useState<number>(8)
+  const [trendData, setTrendData] = useState<{ week_labels: string[]; series: { engine: string; points: { week: string; score: number | null }[] }[]; total_runs: number } | null>(null)
+  const [trendLoading, setTrendLoading] = useState(false)
 
   function loadHistory() {
     fetch(`/api/clients/${clientId}/ai-visibility`)
@@ -102,6 +221,17 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
   }
 
   useEffect(() => { loadHistory() }, [clientId])
+
+  useEffect(() => {
+    let cancelled = false
+    setTrendLoading(true)
+    fetch('/api/clients/' + clientId + '/ai-visibility/trend?weeks=' + trendWeeks)
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setTrendData(data) })
+      .catch(() => { if (!cancelled) setTrendData(null) })
+      .finally(() => { if (!cancelled) setTrendLoading(false) })
+    return () => { cancelled = true }
+  }, [clientId, trendWeeks])
 
   async function runCheck() {
     setRunning(true); setError(''); setOpen(null); setProgress(null)
@@ -387,6 +517,8 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
             <div style={metricCard}><div style={{ fontSize: '11.5px', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '5px' }}>Prompts Tracked<InfoTip text="Number of prompts actively monitored for this client across all engines." /></div><div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '26px', color: navy }}>{promptCount}</div></div>
           </div>
 
+          <TrendChart data={trendData} weeks={trendWeeks} onWeeksChange={setTrendWeeks} loading={trendLoading} />
+
           <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '14px', color: navy, margin: '0 0 8px' }}>Search-feature engines</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
             {searchEngines.map(def => <EngineCard key={def.key} def={def} />)}
@@ -473,6 +605,11 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
+
+
+
+
 
 
 
