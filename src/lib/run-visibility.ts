@@ -1,13 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
+﻿import { createClient } from '@supabase/supabase-js'
 import { Client as QStashClient } from '@upstash/qstash'
 
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
 export const PERPLEXITY_MODEL = 'sonar-pro'
-const DATAFORSEO_LIVE = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced'
 const OPENAI_RESPONSES = 'https://api.openai.com/v1/responses'
 export const OPENAI_MODEL = 'gpt-5.4-mini'
 export const GEMINI_MODEL = 'gemini-3.5-flash'
 const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
+const CLORO_GOOGLE = 'https://api.cloro.dev/v1/monitor/google'
+
+export const AIO_ENGINE_KEY = 'google_ai_overviews:cloro'
 
 export function adminClient() {
   return createClient(
@@ -27,17 +29,6 @@ async function runWithConcurrency<T>(items: T[], limit: number, fn: (item: T) =>
   }
   const n = Math.max(1, Math.min(limit, items.length))
   await Promise.all(Array.from({ length: n }, () => worker()))
-}
-
-export function dataForSeoAuth() {
-  if (process.env.DATAFORSEO_B64) return `Basic ${process.env.DATAFORSEO_B64}`
-  const login = process.env.DATAFORSEO_LOGIN ?? ''
-  const password = process.env.DATAFORSEO_PASSWORD ?? ''
-  return `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}`
-}
-
-export function dataForSeoConfigured() {
-  return !!(process.env.DATAFORSEO_B64 || (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD))
 }
 
 export function hostOf(url: string) {
@@ -182,62 +173,38 @@ async function queryGemini(prompt: string): Promise<{ answer: string; citations:
   }
 }
 
-function parseAIOResult(result: any): { answer: string; citations: string[] } {
-  const items = result?.items ?? []
-  const aio = Array.isArray(items) ? items.find((it: any) => it?.type === 'ai_overview') : null
-  if (!aio) return { answer: '', citations: [] }
-
-  let answer = typeof aio.markdown === 'string' ? aio.markdown : ''
-  if (!answer && Array.isArray(aio.items)) {
-    answer = aio.items
-      .filter((el: any) => el?.type === 'ai_overview_element')
-      .map((el: any) => el.markdown || el.text || '')
-      .filter(Boolean)
-      .join('\n\n')
-  }
-
-  const refs: string[] = []
-  const collect = (arr: any) => {
-    if (Array.isArray(arr)) {
-      for (const r of arr) {
-        if (r?.url) refs.push(String(r.url))
-      }
-    }
-  }
-  collect(aio.references)
-  if (Array.isArray(aio.items)) {
-    for (const el of aio.items) collect(el?.references)
-  }
-  return { answer, citations: Array.from(new Set(refs)) }
-}
-
-async function queryAIOverview(keyword: string): Promise<{ answer: string; citations: string[] }> {
-  const auth = dataForSeoAuth()
+async function queryAIOverviewCloro(keyword: string): Promise<{ answer: string; citations: string[] }> {
+  const apiKey = process.env.CLORO_API_KEY
+  if (!apiKey) throw new Error('CLORO_API_KEY not configured')
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 90000)
+  const timeout = setTimeout(() => controller.abort(), 120000)
   try {
-    const res = await fetch(DATAFORSEO_LIVE, {
+    const res = await fetch(CLORO_GOOGLE, {
       method: 'POST',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{
-        keyword,
-        location_code: 2840,
-        language_code: 'en',
-        load_async_ai_overview: true,
-        expand_ai_overview: true,
-      }]),
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: keyword,
+        country: 'US',
+        include: { aioverview: { markdown: true } },
+      }),
       signal: controller.signal,
     })
     if (!res.ok) {
       const body = await res.text()
-      throw new Error(`DataForSEO live ${res.status}: ${body.slice(0, 200)}`)
+      throw new Error(`cloro ${res.status}: ${body.slice(0, 200)}`)
     }
     const data = await res.json()
-    if (data?.status_code !== 20000) {
-      throw new Error(`DataForSEO live status ${data?.status_code}: ${data?.status_message}`)
+    if (data?.success !== true) {
+      throw new Error(`cloro non-success: ${JSON.stringify(data?.error || {}).slice(0, 200)}`)
     }
-    const result = data?.tasks?.[0]?.result?.[0]
-    return parseAIOResult(result)
+    const aio = data?.result?.aioverview
+    if (!aio) return { answer: '', citations: [] }
+    const answer = typeof aio.markdown === 'string' && aio.markdown
+      ? aio.markdown
+      : (typeof aio.text === 'string' ? aio.text : '')
+    const sources = Array.isArray(aio.sources) ? aio.sources : []
+    const citations = sources.map((s: any) => s?.url).filter((u: any) => typeof u === 'string')
+    return { answer, citations: Array.from(new Set(citations)) }
   } finally {
     clearTimeout(timeout)
   }
@@ -378,7 +345,7 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
 
   const results: any[] = []
   let aioError: string | null = null
-  const aioOn = dataForSeoConfigured()
+  const aioOn = !!process.env.CLORO_API_KEY
 
   const PROMPT_CONCURRENCY = 4
 
@@ -419,11 +386,11 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
     if (aioOn) {
       jobs.push((async () => {
         try {
-          const { answer, citations } = await queryAIOverview(p.prompt_text)
-          await recordRun(db, clientId, p.id, p.prompt_text, 'google_ai_overviews:dataforseo', brand, domain, answer, citations, results)
+          const { answer, citations } = await queryAIOverviewCloro(p.prompt_text)
+          await recordRun(db, clientId, p.id, p.prompt_text, AIO_ENGINE_KEY, brand, domain, answer, citations, results)
         } catch (err: any) {
           if (!aioError) aioError = err.message
-          results.push({ engine: 'google_ai_overviews:dataforseo', prompt: p.prompt_text, error: err.message })
+          results.push({ engine: AIO_ENGINE_KEY, prompt: p.prompt_text, error: err.message })
         }
       })())
     }
@@ -457,7 +424,7 @@ async function queryOneEngine(engine: string, promptText: string): Promise<{ ans
   if (engine.startsWith('perplexity:')) return queryPerplexity(promptText)
   if (engine.startsWith('chatgpt:')) return queryChatGPT(promptText)
   if (engine.startsWith('gemini:')) return queryGemini(promptText)
-  if (engine.startsWith('google_ai_overviews:')) return queryAIOverview(promptText)
+  if (engine.startsWith('google_ai_overviews:')) return queryAIOverviewCloro(promptText)
   throw new Error(`Unknown engine: ${engine}`)
 }
 
@@ -539,7 +506,7 @@ function enginesForEnv(): string[] {
   const engines = [`perplexity:${PERPLEXITY_MODEL}`]
   if (process.env.OPENAI_API_KEY) engines.push(`chatgpt:${OPENAI_MODEL}`)
   if (process.env.GEMINI_API_KEY) engines.push(`gemini:${GEMINI_MODEL}`)
-  if (dataForSeoConfigured()) engines.push('google_ai_overviews:dataforseo')
+  if (process.env.CLORO_API_KEY) engines.push(AIO_ENGINE_KEY)
   return engines
 }
 

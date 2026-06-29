@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { adminClient, dataForSeoConfigured, tagCitations, enqueueClientVisibility } from '@/lib/run-visibility'
+import { adminClient, tagCitations, enqueueClientVisibility } from '@/lib/run-visibility'
 
 export const maxDuration = 800
 
@@ -101,7 +101,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     engines: byEngine,
     overall: results.length ? overall : null,
     lastRunAt,
-    aioConfigured: dataForSeoConfigured(),
+    aioConfigured: !!process.env.CLORO_API_KEY,
   })
 }
 
