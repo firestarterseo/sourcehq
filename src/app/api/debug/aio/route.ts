@@ -25,48 +25,39 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const clientId = url.searchParams.get('client_id') || 'bb0b88d0-0cbf-46af-805e-10ee1b9c2e47'
 
-  const db = adminClient()
-  const { data: runs } = await db
+  // Use admin client (service role, bypasses RLS) to see the "true" state of the data
+  const adminDb = adminClient()
+
+  // Pull the most recent 6 runs admin-side
+  const { data: adminRuns, error: runsErr } = await adminDb
     .from('ai_visibility_runs')
-    .select('id, engine, prompt_id, score, citations, run_at')
+    .select('id, engine, prompt_id, score')
     .eq('client_id', clientId)
     .order('run_at', { ascending: false })
-    .limit(60)
+    .limit(6)
 
-  const { data: prompts } = await db
-    .from('ai_visibility_prompts')
-    .select('id, prompt_text')
-    .eq('client_id', clientId)
-  const promptMap = new Map((prompts || []).map((p: any) => [p.id, p.prompt_text]))
+  const runIds = (adminRuns || []).map((r: any) => r.id)
 
-  const runIds = (runs || []).map((r: any) => r.id)
-  const { data: mentions } = await db
+  // Try fetching mentions both ways: admin (service role) and as the logged-in user
+  const { data: adminMentions, error: adminMentionsErr } = await adminDb
     .from('ai_visibility_mentions')
-    .select('run_id, brand_mentioned, brand_cited, answer_position, total_named, sentiment')
+    .select('run_id, brand_mentioned, brand_cited, answer_position')
     .in('run_id', runIds.length ? runIds : ['00000000-0000-0000-0000-000000000000'])
-  const mentionMap = new Map((mentions || []).map((m: any) => [m.run_id, m]))
 
-  const rows = (runs || []).map((r: any) => {
-    const m = mentionMap.get(r.id)
-    return {
-      run_at: r.run_at,
-      engine: r.engine,
-      prompt: promptMap.get(r.prompt_id) || '(unknown)',
-      score: r.score,
-      citations_count: Array.isArray(r.citations) ? r.citations.length : 0,
-      mentioned: m ? !!m.brand_mentioned : null,
-      cited: m ? !!m.brand_cited : null,
-      position: m ? m.answer_position : null,
-    }
-  })
-
-  const engineCounts: Record<string, number> = {}
-  for (const r of rows) engineCounts[r.engine] = (engineCounts[r.engine] || 0) + 1
+  const { data: userMentions, error: userMentionsErr } = await supabase
+    .from('ai_visibility_mentions')
+    .select('run_id, brand_mentioned, brand_cited, answer_position')
+    .in('run_id', runIds.length ? runIds : ['00000000-0000-0000-0000-000000000000'])
 
   return NextResponse.json({
     client_id: clientId,
-    total_recent_runs: rows.length,
-    engine_counts_in_recent_runs: engineCounts,
-    rows,
+    run_ids: runIds,
+    runs_sample: adminRuns,
+    admin_mentions_count: (adminMentions || []).length,
+    admin_mentions_error: adminMentionsErr?.message || null,
+    admin_mentions_sample: adminMentions,
+    user_mentions_count: (userMentions || []).length,
+    user_mentions_error: userMentionsErr?.message || null,
+    user_mentions_sample: userMentions,
   })
 }
