@@ -7,7 +7,6 @@ export const maxDuration = 30
 
 function weekKey(iso: string): string {
   const d = new Date(iso)
-  // ISO week start = Monday. Compute the Monday of that week in UTC.
   const day = d.getUTCDay()
   const diff = (day === 0 ? -6 : 1 - day)
   const monday = new Date(d)
@@ -44,39 +43,55 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const db = adminClient()
   const { data: runs, error } = await db
     .from('ai_visibility_runs')
-    .select('id, engine, run_at, score')
+    .select('id, run_at')
     .eq('client_id', id)
     .gte('run_at', cutoff)
     .order('run_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Group: engine -> week -> { sum, count }
-  const buckets = new Map<string, Map<string, { sum: number; count: number }>>()
-  const allWeeks = new Set<string>()
-  for (const r of runs || []) {
-    const wk = weekKey(r.run_at)
-    allWeeks.add(wk)
-    if (!buckets.has(r.engine)) buckets.set(r.engine, new Map())
-    const eng = buckets.get(r.engine)!
-    const prev = eng.get(wk) || { sum: 0, count: 0 }
-    eng.set(wk, { sum: prev.sum + (Number(r.score) || 0), count: prev.count + 1 })
+  const runIds = (runs || []).map((r: any) => r.id)
+  const runWeekById = new Map<string, string>((runs || []).map((r: any) => [r.id, weekKey(r.run_at)]))
+
+  // Pull mentions in batches.
+  const mentionByRun = new Map<string, { mentioned: boolean; cited: boolean }>()
+  if (runIds.length) {
+    const BATCH = 100
+    for (let i = 0; i < runIds.length; i += BATCH) {
+      const slice = runIds.slice(i, i + BATCH)
+      const { data: m } = await db
+        .from('ai_visibility_mentions')
+        .select('run_id, brand_mentioned, brand_cited')
+        .in('run_id', slice)
+      for (const row of m || []) {
+        mentionByRun.set(row.run_id, { mentioned: !!row.brand_mentioned, cited: !!row.brand_cited })
+      }
+    }
   }
 
-  const sortedWeeks = Array.from(allWeeks).sort()
-  const series: { engine: string; points: { week: string; score: number | null }[] }[] = []
-  for (const [engine, weekMap] of Array.from(buckets.entries())) {
-    const points = sortedWeeks.map(wk => {
-      const b = weekMap.get(wk)
-      return { week: wk, score: b && b.count ? Math.round(b.sum / b.count) : null }
-    })
-    series.push({ engine, points })
+  // Bucket per week: count cited, mentioned-not-cited, absent.
+  const buckets = new Map<string, { cited: number; mentioned: number; absent: number; total: number }>()
+  for (const r of runs || []) {
+    const wk = runWeekById.get(r.id)!
+    if (!buckets.has(wk)) buckets.set(wk, { cited: 0, mentioned: 0, absent: 0, total: 0 })
+    const b = buckets.get(wk)!
+    const m = mentionByRun.get(r.id)
+    if (m?.cited) b.cited += 1
+    else if (m?.mentioned) b.mentioned += 1
+    else b.absent += 1
+    b.total += 1
   }
+
+  const weekLabels = Array.from(buckets.keys()).sort()
+  const points = weekLabels.map(wk => {
+    const b = buckets.get(wk)!
+    return { week: wk, cited: b.cited, mentioned: b.mentioned, absent: b.absent, total: b.total }
+  })
 
   return NextResponse.json({
     weeks_requested: weeks,
-    week_labels: sortedWeeks,
-    series,
+    week_labels: weekLabels,
+    points,
     total_runs: (runs || []).length,
   })
 }
