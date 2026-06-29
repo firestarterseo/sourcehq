@@ -8,8 +8,10 @@ export const OPENAI_MODEL = 'gpt-5.4-mini'
 export const GEMINI_MODEL = 'gemini-3.5-flash'
 const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const CLORO_GOOGLE = 'https://api.cloro.dev/v1/monitor/google'
+const CLORO_AIMODE = 'https://api.cloro.dev/v1/monitor/aimode'
 
 export const AIO_ENGINE_KEY = 'google_ai_overviews:cloro'
+export const AIMODE_ENGINE_KEY = 'google_ai_mode:cloro'
 
 export function adminClient() {
   return createClient(
@@ -210,6 +212,43 @@ async function queryAIOverviewCloro(keyword: string): Promise<{ answer: string; 
   }
 }
 
+async function queryAIMode(keyword: string): Promise<{ answer: string; citations: string[] }> {
+  const apiKey = process.env.CLORO_API_KEY
+  if (!apiKey) throw new Error('CLORO_API_KEY not configured')
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120000)
+  try {
+    const res = await fetch(CLORO_AIMODE, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: keyword,
+        country: 'US',
+        include: { markdown: true },
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`cloro aimode ${res.status}: ${body.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    if (data?.success !== true) {
+      throw new Error(`cloro aimode non-success: ${JSON.stringify(data?.error || {}).slice(0, 200)}`)
+    }
+    const result = data?.result
+    if (!result) return { answer: '', citations: [] }
+    const answer = typeof result.markdown === 'string' && result.markdown
+      ? result.markdown
+      : (typeof result.text === 'string' ? result.text : '')
+    const sources = Array.isArray(result.sources) ? result.sources : []
+    const citations = sources.map((s: any) => s?.url).filter((u: any) => typeof u === 'string')
+    return { answer, citations: Array.from(new Set(citations)) }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 async function parseAnswer(brand: string, prompt: string, answer: string) {
   const parsePrompt = `You are analyzing an AI search engine's answer to measure brand visibility.
 
@@ -393,6 +432,14 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
           results.push({ engine: AIO_ENGINE_KEY, prompt: p.prompt_text, error: err.message })
         }
       })())
+      jobs.push((async () => {
+        try {
+          const { answer, citations } = await queryAIMode(p.prompt_text)
+          await recordRun(db, clientId, p.id, p.prompt_text, AIMODE_ENGINE_KEY, brand, domain, answer, citations, results)
+        } catch (err: any) {
+          results.push({ engine: AIMODE_ENGINE_KEY, prompt: p.prompt_text, error: err.message })
+        }
+      })())
     }
 
     await Promise.allSettled(jobs)
@@ -424,6 +471,7 @@ async function queryOneEngine(engine: string, promptText: string): Promise<{ ans
   if (engine.startsWith('perplexity:')) return queryPerplexity(promptText)
   if (engine.startsWith('chatgpt:')) return queryChatGPT(promptText)
   if (engine.startsWith('gemini:')) return queryGemini(promptText)
+  if (engine.startsWith('google_ai_mode:')) return queryAIMode(promptText)
   if (engine.startsWith('google_ai_overviews:')) return queryAIOverviewCloro(promptText)
   throw new Error(`Unknown engine: ${engine}`)
 }
@@ -507,6 +555,7 @@ function enginesForEnv(): string[] {
   if (process.env.OPENAI_API_KEY) engines.push(`chatgpt:${OPENAI_MODEL}`)
   if (process.env.GEMINI_API_KEY) engines.push(`gemini:${GEMINI_MODEL}`)
   if (process.env.CLORO_API_KEY) engines.push(AIO_ENGINE_KEY)
+  if (process.env.CLORO_API_KEY) engines.push(AIMODE_ENGINE_KEY)
   return engines
 }
 
@@ -578,3 +627,8 @@ export async function enqueueClientVisibility(db: any, clientId: string, trigger
 
   return { ok: true, batchId: batch.id, totalJobs, published: insertedJobs.length - pubFailures.length, publishError }
 }
+
+
+
+
+
