@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 
 export default async function TeamPage() {
   const ctx = await getAuthContext()
-  if (!ctx) redirect("/login")
+  if (!ctx) redirect("/auth/login")
   if (!hasRole(ctx.member.role, "admin")) redirect("/dashboard")
 
   const admin = adminClient()
@@ -84,4 +84,5 @@ export default async function TeamPage() {
     </div>
   )
 }
+
 
