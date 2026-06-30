@@ -27,8 +27,16 @@ export function adminClient() {
 export async function getAuthContext(): Promise<AuthContext | null> {
   const supabase = await createServerSupabaseClient()
   const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-  if (sessionError || !session?.user) return null
+  if (sessionError) {
+    console.error('[getAuthContext] session error:', sessionError.message)
+    return null
+  }
+  if (!session?.user) {
+    console.error('[getAuthContext] no session.user found')
+    return null
+  }
   const user = session.user
+  console.error('[getAuthContext] user found:', user.id, user.email)
 
   const { data: member, error: memberError } = await adminClient()
     .from('organization_members')
@@ -36,7 +44,15 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (memberError || !member) return null
+  if (memberError) {
+    console.error('[getAuthContext] member lookup error:', memberError.message)
+    return null
+  }
+  if (!member) {
+    console.error('[getAuthContext] no organization_members row for user:', user.id)
+    return null
+  }
+  console.error('[getAuthContext] member found:', member.id, member.role)
 
   return {
     user: { id: user.id, email: user.email ?? '' },
