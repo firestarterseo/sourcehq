@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from './supabase-server'
+﻿import { createServerSupabaseClient } from './supabase-server'
 import { createClient } from '@supabase/supabase-js'
 
 export type Role = 'owner' | 'admin' | 'member' | 'client'
@@ -16,10 +16,6 @@ export type AuthContext = {
   member: AuthMember
 }
 
-/**
- * Admin client for bypassing RLS. Use only when you need to read/write
- * across users, or perform actions the caller's RLS would block.
- */
 export function adminClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,21 +24,12 @@ export function adminClient() {
   )
 }
 
-/**
- * Returns the authenticated user and their organization_members row.
- * Returns null if unauthenticated or not a member of any org.
- *
- * Usage in a route handler:
- *   const ctx = await getAuthContext()
- *   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
- *   // ctx.user.id, ctx.member.org_id, ctx.member.role available
- */
 export async function getAuthContext(): Promise<AuthContext | null> {
   const supabase = await createServerSupabaseClient()
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  if (userError || !user) return null
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError || !session?.user) return null
+  const user = session.user
 
-  // Use admin client to read the membership row, bypassing RLS recursion concerns
   const { data: member, error: memberError } = await adminClient()
     .from('organization_members')
     .select('id, org_id, user_id, role, is_primary')
@@ -57,19 +44,11 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   }
 }
 
-/**
- * Role hierarchy check. Returns true if the caller's role is at least the
- * required level. Order: owner > admin > member > client.
- */
 export function hasRole(callerRole: Role, requiredRole: Role): boolean {
   const order: Record<Role, number> = { owner: 3, admin: 2, member: 1, client: 0 }
   return order[callerRole] >= order[requiredRole]
 }
 
-/**
- * Convenience: throws an HTTP-style error if the caller doesn't meet the
- * required role. Route handlers should catch and return appropriate status.
- */
 export class AuthError extends Error {
   status: number
   constructor(message: string, status: number) {
