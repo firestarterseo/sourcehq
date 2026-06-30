@@ -1,36 +1,56 @@
 ﻿import { redirect } from "next/navigation"
+import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { createClient } from "@supabase/supabase-js"
 import Sidebar from "@/components/Sidebar"
-import { getAuthContext, adminClient, hasRole } from "@/lib/auth-context"
-import TeamClient from "./TeamClient"
 import SettingsTabs from "../SettingsTabs"
+import TeamClient from "./TeamClient"
 
-export const dynamic = "force-dynamic"
+function adminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
 
 export default async function TeamPage() {
-  const ctx = await getAuthContext()
-  if (!ctx) redirect("/auth/login")
-  if (!hasRole(ctx.member.role, "admin")) redirect("/dashboard")
+  const supabase = await createServerSupabaseClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  const email = session?.user?.email || ""
+  const userId = session?.user?.id
+
+  if (!userId) redirect("/auth/login")
 
   const admin = adminClient()
 
-  // Members
+  const { data: callerMember } = await admin
+    .from("organization_members")
+    .select("id, org_id, role, is_primary")
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (!callerMember) redirect("/auth/login")
+  if (callerMember.role !== "owner" && callerMember.role !== "admin") {
+    redirect("/dashboard")
+  }
+
+  const orgId = callerMember.org_id
+
   const { data: members } = await admin
     .from("organization_members")
     .select("id, user_id, role, is_primary, joined_at, invited_at")
-    .eq("org_id", ctx.member.org_id)
+    .eq("org_id", orgId)
     .order("joined_at", { ascending: true })
 
-  // Pending invitations
   const { data: invitations } = await admin
     .from("team_invitations")
     .select("id, email, role, invited_by, created_at, expires_at")
-    .eq("org_id", ctx.member.org_id)
+    .eq("org_id", orgId)
     .is("accepted_at", null)
     .is("revoked_at", null)
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
 
-  // Emails for member user_ids and invited_by ids
   const userIds = new Set<string>()
   for (const m of members || []) userIds.add(m.user_id)
   for (const i of invitations || []) userIds.add(i.invited_by)
@@ -65,7 +85,7 @@ export default async function TeamPage() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-dm-sans), DM Sans, sans-serif" }}>
-      <Sidebar active="Settings" email={ctx.user.email} />
+      <Sidebar active="Settings" email={email} />
       <div style={{ marginLeft: "220px", flex: 1, background: "#F8F8F6" }}>
         <div style={{ background: "#fff", borderBottom: "0.5px solid #E5E5E3", padding: "0 24px", height: "52px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: "15px", fontWeight: "600", color: "#0D1B3E" }}>Settings</span>
@@ -75,15 +95,12 @@ export default async function TeamPage() {
           <TeamClient
             members={enrichedMembers}
             invites={enrichedInvites}
-            currentUserId={ctx.user.id}
-            currentRole={ctx.member.role}
-            currentIsPrimary={ctx.member.is_primary}
+            currentUserId={userId}
+            currentRole={callerMember.role as "owner" | "admin" | "member" | "client"}
+            currentIsPrimary={callerMember.is_primary}
           />
         </div>
       </div>
     </div>
   )
 }
-
-
-
