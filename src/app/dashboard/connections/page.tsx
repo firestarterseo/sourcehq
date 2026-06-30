@@ -123,7 +123,6 @@ function ConnectionsContent() {
 
           <ConnectionRow name="Ahrefs" description="Coming soon — agency API key" connected={false} />
           <ConnectionRow name="SEMrush" description="Coming soon — agency API key" connected={false} />
-          <ConnectionRow name="Weather & economic data" description="Coming soon — powers unique SOURCE report insights" connected={false} />
         </div>
 
         {!status && (
@@ -144,6 +143,7 @@ export default function ConnectionsPage() {
     </div>
   )
 }
+
 
 
 
