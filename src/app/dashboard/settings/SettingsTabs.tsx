@@ -15,7 +15,7 @@ export default function SettingsTabs({ active }: { active: Tab }) {
       {TABS.map(t => {
         const isActive = t.id === active
         return (
-          <Link
+          <a
             key={t.id}
             href={t.href}
             style={{
@@ -29,9 +29,10 @@ export default function SettingsTabs({ active }: { active: Tab }) {
             }}
           >
             {t.label}
-          </Link>
+          </a>
         )
       })}
     </div>
   )
 }
+
