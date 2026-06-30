@@ -440,25 +440,6 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
 
       {!prompts ? (
         <p style={{ fontSize: '13px', color: '#6B7280' }}>Loading...</p>
-      ) : running ? (
-        <div style={{ background: '#fff', border, borderRadius: '12px', padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ maxWidth: '420px', margin: '0 auto' }}>
-            <div style={{ width: '40px', height: '40px', margin: '0 auto 20px', border: '3px solid #EDE9FE', borderTopColor: violet, borderRadius: '50%', animation: 'vspin 0.8s linear infinite' }} />
-            <style>{'@keyframes vspin { to { transform: rotate(360deg) } }'}</style>
-            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '600', fontSize: '16px', color: navy, margin: '0 0 8px' }}>Running visibility checks</h3>
-            <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 0 18px', lineHeight: 1.6 }}>
-              Querying each AI engine for every prompt. This usually takes a couple of minutes. You can keep this tab open.
-            </p>
-            {progress && progress.total > 0 && (
-              <>
-                <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: '700', fontSize: '22px', color: navy, marginBottom: '10px' }}>{progress.done} of {progress.total}</div>
-                <div style={{ height: '8px', borderRadius: '4px', background: '#F1EFE8', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.round(progress.done / progress.total * 100)}%`, height: '100%', background: violet, transition: 'width 0.4s ease' }} />
-                </div>
-              </>
-            )}
-          </div>
-        </div>
       ) : inSetup ? (
         <div style={{ background: '#fff', border, borderRadius: '12px', padding: '28px 24px' }}>
           <div style={{ maxWidth: '560px', margin: '0 auto' }}>
@@ -594,9 +575,44 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
           )}
         </>
       )}
+    
+      {running && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(13, 27, 62, 0.55)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '16px', padding: '40px 48px',
+            maxWidth: '420px', width: '90%', textAlign: 'center',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          }}>
+            <div style={{
+              width: '40px', height: '40px', margin: '0 auto 24px',
+              border: '3px solid #EDE9FE', borderTopColor: '#6D28D9',
+              borderRadius: '50%', animation: 'sourcehq-vis-spin 0.8s linear infinite',
+            }} />
+            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: 600, color: '#0D1B3E', marginBottom: '8px' }}>
+              Running visibility checks
+            </h3>
+            <p style={{ fontSize: '14px', color: '#6D28D9', fontWeight: 500, marginBottom: '6px', minHeight: '20px' }}>
+              {progress && progress.total > 0 ? `${progress.done} of ${progress.total} checks complete` : 'Starting...'}
+            </p>
+            <p style={{ fontSize: '12px', color: '#9CA3AF', margin: 0 }}>
+              Querying each AI engine for every prompt. Please keep this tab open.
+            </p>
+          </div>
+          <style>{`@keyframes sourcehq-vis-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
     </div>
   )
 }
+
+
+
+
 
 
 
