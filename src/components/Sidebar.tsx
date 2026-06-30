@@ -1,4 +1,4 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 import Logo from '@/components/Logo'
 import SignOutButton from '@/components/SignOutButton'
 
@@ -13,7 +13,6 @@ export default function Sidebar({ active, email }: SidebarProps) {
     { label: 'Clients', href: '/dashboard/clients' },
     { label: 'Reports', href: '/dashboard/reports' },
     { label: 'Connections', href: '/dashboard/connections' },
-    { label: 'Insights', href: '/dashboard/insights' },
     { label: 'Settings', href: '/dashboard/settings' },
   ]
 
@@ -44,3 +43,4 @@ export default function Sidebar({ active, email }: SidebarProps) {
     </div>
   )
 }
+
