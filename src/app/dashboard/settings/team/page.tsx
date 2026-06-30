@@ -1,5 +1,5 @@
 ﻿import { redirect } from "next/navigation"
-import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import Sidebar from "@/components/Sidebar"
 import SettingsTabs from "../SettingsTabs"
@@ -14,27 +14,45 @@ function adminClient() {
 }
 
 export default async function TeamPage() {
-  const supabase = await createServerSupabaseClient()
-  const sessionResult = await supabase.auth.getSession()
-  console.error("[team-page] sessionResult shape:", JSON.stringify({
-    hasData: !!sessionResult.data,
-    hasSession: !!sessionResult.data?.session,
-    hasUser: !!sessionResult.data?.session?.user,
-    userEmail: sessionResult.data?.session?.user?.email,
-    userId: sessionResult.data?.session?.user?.id,
-    errorMsg: sessionResult.error?.message,
-  }))
+  const cookieStore = await cookies()
+  const allCookies = cookieStore.getAll()
+  console.error("[team-page] all cookies:", JSON.stringify(allCookies.map(c => c.name)))
 
-  const session = sessionResult.data?.session
-  const email = session?.user?.email || ""
-  const userId = session?.user?.id
+  const authCookies = allCookies.filter(c => c.name.startsWith("sb-") && c.name.includes("auth-token"))
+  console.error("[team-page] auth cookie names found:", JSON.stringify(authCookies.map(c => c.name)))
 
-  if (!userId) {
-    console.error("[team-page] no userId, redirecting to login")
+  if (authCookies.length === 0) {
+    console.error("[team-page] no auth cookies found at all")
+    redirect("/auth/login")
+  }
+
+  authCookies.sort((a, b) => a.name.localeCompare(b.name))
+  const rawToken = authCookies.map(c => c.value).join("")
+
+  let parsedToken: any
+  try {
+    const decoded = Buffer.from(rawToken.replace(/^base64-/, ""), "base64").toString("utf-8")
+    parsedToken = JSON.parse(decoded)
+  } catch (e: any) {
+    console.error("[team-page] failed to decode auth token:", e.message)
+    redirect("/auth/login")
+  }
+
+  const accessToken = parsedToken?.access_token
+  if (!accessToken) {
+    console.error("[team-page] no access_token in decoded payload")
     redirect("/auth/login")
   }
 
   const admin = adminClient()
+  const { data: userData, error: userError } = await admin.auth.getUser(accessToken)
+  if (userError || !userData?.user) {
+    console.error("[team-page] getUser with explicit token failed:", userError?.message)
+    redirect("/auth/login")
+  }
+
+  const userId = userData.user.id
+  const email = userData.user.email || ""
 
   const { data: callerMember, error: callerError } = await admin
     .from("organization_members")
@@ -42,19 +60,11 @@ export default async function TeamPage() {
     .eq("user_id", userId)
     .maybeSingle()
 
-  console.error("[team-page] callerMember lookup:", JSON.stringify({
-    found: !!callerMember,
-    role: callerMember?.role,
-    is_primary: callerMember?.is_primary,
-    error: callerError?.message,
-  }))
-
-  if (!callerMember) {
-    console.error("[team-page] no membership row, redirecting to login")
+  if (callerError || !callerMember) {
+    console.error("[team-page] no membership row:", callerError?.message)
     redirect("/auth/login")
   }
   if (callerMember.role !== "owner" && callerMember.role !== "admin") {
-    console.error("[team-page] role insufficient, redirecting to dashboard")
     redirect("/dashboard")
   }
 
