@@ -1,4 +1,6 @@
 ﻿import { redirect } from "next/navigation"
+
+export const dynamic = "force-dynamic"
 import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import Sidebar from "@/components/Sidebar"
@@ -138,3 +140,4 @@ export default async function TeamPage() {
     </div>
   )
 }
+
