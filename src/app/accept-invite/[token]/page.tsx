@@ -79,7 +79,7 @@ export default function AcceptInvitePage() {
       }
       setDone(true)
       // Redirect to login after a short delay
-      setTimeout(() => router.push("/login"), 2000)
+      setTimeout(() => router.push("/auth/login"), 2000)
     } catch (e: any) {
       setSubmitError(e.message || "Failed to accept invitation")
       setSubmitting(false)
@@ -265,3 +265,4 @@ const errorStyle: React.CSSProperties = {
   color: "#b91c1c",
   margin: "0 0 12px 0",
 }
+
