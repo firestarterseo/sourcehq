@@ -15,22 +15,46 @@ function adminClient() {
 
 export default async function TeamPage() {
   const supabase = await createServerSupabaseClient()
-  const { data: { session } } = await supabase.auth.getSession()
+  const sessionResult = await supabase.auth.getSession()
+  console.error("[team-page] sessionResult shape:", JSON.stringify({
+    hasData: !!sessionResult.data,
+    hasSession: !!sessionResult.data?.session,
+    hasUser: !!sessionResult.data?.session?.user,
+    userEmail: sessionResult.data?.session?.user?.email,
+    userId: sessionResult.data?.session?.user?.id,
+    errorMsg: sessionResult.error?.message,
+  }))
+
+  const session = sessionResult.data?.session
   const email = session?.user?.email || ""
   const userId = session?.user?.id
 
-  if (!userId) redirect("/auth/login")
+  if (!userId) {
+    console.error("[team-page] no userId, redirecting to login")
+    redirect("/auth/login")
+  }
 
   const admin = adminClient()
 
-  const { data: callerMember } = await admin
+  const { data: callerMember, error: callerError } = await admin
     .from("organization_members")
     .select("id, org_id, role, is_primary")
     .eq("user_id", userId)
     .maybeSingle()
 
-  if (!callerMember) redirect("/auth/login")
+  console.error("[team-page] callerMember lookup:", JSON.stringify({
+    found: !!callerMember,
+    role: callerMember?.role,
+    is_primary: callerMember?.is_primary,
+    error: callerError?.message,
+  }))
+
+  if (!callerMember) {
+    console.error("[team-page] no membership row, redirecting to login")
+    redirect("/auth/login")
+  }
   if (callerMember.role !== "owner" && callerMember.role !== "admin") {
+    console.error("[team-page] role insufficient, redirecting to dashboard")
     redirect("/dashboard")
   }
 
