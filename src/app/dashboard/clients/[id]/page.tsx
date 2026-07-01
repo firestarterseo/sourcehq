@@ -7,6 +7,7 @@ import Sidebar from '@/components/Sidebar'
 import GenerateReportButton from '@/components/GenerateReportButton'
 import DataSourceTiles from '@/components/DataSourceTiles'
 import VisibilityTab from '@/components/VisibilityTab'
+import DistributionTab from '@/components/DistributionTab'
 import { REGIONS } from '@/lib/regions'
 import { Search, BarChart3, Phone, Link2 } from 'lucide-react'
 
@@ -72,7 +73,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', industry: '', website: '', region: '' })
-  const [activeTab, setActiveTab] = useState<'overview' | 'visibility' | 'content' | 'sources'>('visibility')
+  const [activeTab, setActiveTab] = useState<'overview' | 'visibility' | 'content' | 'distribution' | 'sources'>('visibility')
 
   const [reports, setReports] = useState<ReportRow[] | null>(null)
   const [confirmReportId, setConfirmReportId] = useState<string | null>(null)
@@ -283,8 +284,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', display: 'flex', gap: '26px' }}>
-          {(['overview','visibility','content','sources'] as const).map(t => (
-            <button key={t} onClick={() => setActiveTab(t)} style={{ padding: '14px 2px', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', color: activeTab === t ? '#0D1B3E' : '#6B7280', fontWeight: activeTab === t ? '600' : '400', borderBottom: activeTab === t ? '2px solid #6D28D9' : '2px solid transparent' }}>{t === 'overview' ? 'Overview' : t === 'visibility' ? 'Visibility' : t === 'content' ? 'Content' : 'Data Sources'}</button>
+          {(['overview','visibility','content','distribution','sources'] as const).map(t => (
+            <button key={t} onClick={() => setActiveTab(t)} style={{ padding: '14px 2px', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', color: activeTab === t ? '#0D1B3E' : '#6B7280', fontWeight: activeTab === t ? '600' : '400', borderBottom: activeTab === t ? '2px solid #6D28D9' : '2px solid transparent' }}>{t === 'overview' ? 'Overview' : t === 'visibility' ? 'Visibility' : t === 'content' ? 'Content' : t === 'distribution' ? 'Distribution' : 'Data Sources'}</button>
           ))}
         </div>
 
@@ -370,6 +371,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
           </>)}
 
+          {activeTab === 'distribution' && <DistributionTab clientId={id} />}
+
           {activeTab === 'sources' && (<>
           <DataSourceTiles
             clientId={id}
@@ -439,6 +442,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
+
 
 
 
