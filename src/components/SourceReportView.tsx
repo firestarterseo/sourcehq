@@ -126,28 +126,6 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
         </figure>
       )) : null}
 
-      {report.macro && !report.macro.seasonal && report.macro.seriesChanges?.length > 0 && (
-        <div className="bars">
-          <p className="lab">Economic backdrop</p>
-          {(() => {
-            const maxAbs = Math.max(...report.macro.seriesChanges.map(s => Math.abs(s.changePct)), 1);
-            return report.macro.seriesChanges.map((s, i) => {
-              const widthPct = Math.min((Math.abs(s.changePct) / maxAbs) * 50, 50);
-              const dir = s.direction === 'rising' ? 'up' : s.direction === 'falling' ? 'down' : 'flat';
-              return (
-                <div className="row" key={i}>
-                  <span className="name">{s.series}</span>
-                  <div className="track">
-                    <div className={`fill ${dir}`} style={{ width: dir === 'flat' ? undefined : `${widthPct}%` }} />
-                  </div>
-                  <span className={`pct ${dir}`}>{s.changePct > 0 ? '+' : ''}{s.changePct}%</span>
-                </div>
-              );
-            });
-          })()}
-        </div>
-      )}
-
       {report.findings?.length > 0 && (
         <>
           <h2>Findings</h2>
@@ -180,6 +158,28 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
           )}
         </div>
       ))}
+
+      {report.macro && !report.macro.seasonal && report.macro.seriesChanges?.length > 0 && (
+        <div className="bars">
+          <p className="lab">Economic backdrop</p>
+          {(() => {
+            const maxAbs = Math.max(...report.macro.seriesChanges.map(s => Math.abs(s.changePct)), 1);
+            return report.macro.seriesChanges.map((s, i) => {
+              const widthPct = Math.min((Math.abs(s.changePct) / maxAbs) * 50, 50);
+              const dir = s.direction === 'rising' ? 'up' : s.direction === 'falling' ? 'down' : 'flat';
+              return (
+                <div className="row" key={i}>
+                  <span className="name">{s.series}</span>
+                  <div className="track">
+                    <div className={`fill ${dir}`} style={{ width: dir === 'flat' ? undefined : `${widthPct}%` }} />
+                  </div>
+                  <span className={`pct ${dir}`}>{s.changePct > 0 ? '+' : ''}{s.changePct}%</span>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
 
       {report.faqs?.length > 0 && (
         <>
