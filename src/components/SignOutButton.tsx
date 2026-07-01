@@ -1,8 +1,6 @@
-'use client'
-
+﻿'use client'
 import { createClient } from '@/lib/supabase'
-
-export default function SignOutButton() {
+export default function SignOutButton({ style }: { style?: React.CSSProperties }) {
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -10,7 +8,6 @@ export default function SignOutButton() {
     sessionStorage.clear()
     window.location.href = 'https://sourcehq.vercel.app'
   }
-
   return (
     <button
       onClick={handleSignOut}
@@ -28,6 +25,7 @@ export default function SignOutButton() {
         cursor: 'pointer',
         background: 'transparent',
         fontFamily: 'DM Sans, sans-serif',
+        ...style,
       }}
     >
       Sign out

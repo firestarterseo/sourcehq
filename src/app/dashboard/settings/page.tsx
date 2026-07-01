@@ -1,13 +1,11 @@
 ﻿import { createServerSupabaseClient } from '@/lib/supabase-server'
-import Link from 'next/link'
+import SignOutButton from '@/components/SignOutButton'
 import Sidebar from '@/components/Sidebar'
 import SettingsTabs from './SettingsTabs'
-
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { session } } = await supabase.auth.getSession()
   const email = session?.user?.email || ''
-
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
       <Sidebar active="Settings" email={email} />
@@ -21,7 +19,7 @@ export default async function SettingsPage() {
           <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px' }}>
             <div style={{ padding: '16px 20px', borderBottom: '0.5px solid #E5E5E3' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Account</div>
-              <div style={{ fontSize: '13px', color: '#6B7280' }}>{email || 'â€”'}</div>
+              <div style={{ fontSize: '13px', color: '#6B7280' }}>{email || '—'}</div>
             </div>
             <div style={{ padding: '16px 20px', borderBottom: '0.5px solid #E5E5E3' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Organization</div>
@@ -29,12 +27,10 @@ export default async function SettingsPage() {
             </div>
             <div style={{ padding: '16px 20px' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#0D1B3E', marginBottom: '4px' }}>Plan</div>
-              <div style={{ fontSize: '13px', color: '#6B7280' }}>Internal â€” Firestarter SEO workspace</div>
+              <div style={{ fontSize: '13px', color: '#6B7280' }}>Internal — Firestarter SEO workspace</div>
             </div>
           </div>
-          <Link href="/auth/signout" style={{ display: 'inline-block', background: 'transparent', color: '#DC2626', border: '0.5px solid #DC2626', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '500', textDecoration: 'none' }}>
-            Sign out
-          </Link>
+          <SignOutButton style={{ display: 'inline-block', width: 'auto', background: 'transparent', color: '#DC2626', border: '0.5px solid #DC2626', borderRadius: '8px', padding: '8px 20px', fontSize: '13px' }} />
         </div>
       </div>
     </div>
