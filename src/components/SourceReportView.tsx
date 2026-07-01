@@ -48,6 +48,19 @@ const CSS = `
 .srv .strip .cell .l{font-family:Inter,sans-serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#5C6158;margin-top:6px;}
 .srv .limits{background:#fff;border:1px solid #E2DED3;border-left:4px solid #B0832E;padding:14px 18px;margin:18px 0;}
 .srv .limits p{margin:0;font-size:15px;color:#5C6158;}
+.srv .bars{background:#fff;border:1px solid #E2DED3;padding:20px 22px;margin:30px 0;}
+.srv .bars .lab{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#B0832E;font-weight:600;margin:0 0 16px;}
+.srv .bars .row{display:grid;grid-template-columns:160px 1fr 60px;align-items:center;gap:12px;padding:8px 0;}
+.srv .bars .row .name{font-family:Inter,sans-serif;font-size:13px;color:#1A1A17;}
+.srv .bars .row .track{position:relative;height:8px;background:#F1EEE4;border-radius:4px;overflow:hidden;}
+.srv .bars .row .fill{position:absolute;top:0;bottom:0;border-radius:4px;}
+.srv .bars .row .fill.up{background:#1F4D3A;left:50%;}
+.srv .bars .row .fill.down{background:#B0832E;right:50%;}
+.srv .bars .row .fill.flat{background:#C7CCD2;left:50%;width:2px !important;}
+.srv .bars .row .pct{font-family:Inter,sans-serif;font-size:13px;font-weight:600;text-align:right;white-space:nowrap;}
+.srv .bars .row .pct.up{color:#1F4D3A;}
+.srv .bars .row .pct.down{color:#B0832E;}
+@media(max-width:560px){.srv .bars .row{grid-template-columns:100px 1fr 50px;}}
 @media(max-width:560px){.srv .strip{grid-template-columns:1fr 1fr !important;}}
 @media(max-width:560px){.srv{padding:32px 20px;}.srv h1{font-size:24px;}}
 `;
@@ -112,6 +125,28 @@ export default function SourceReportView({ report }: { report: SourceReport }) {
           {ch.caption && <figcaption>{ch.caption}</figcaption>}
         </figure>
       )) : null}
+
+      {report.macro && !report.macro.seasonal && report.macro.seriesChanges?.length > 0 && (
+        <div className="bars">
+          <p className="lab">Economic backdrop</p>
+          {(() => {
+            const maxAbs = Math.max(...report.macro.seriesChanges.map(s => Math.abs(s.changePct)), 1);
+            return report.macro.seriesChanges.map((s, i) => {
+              const widthPct = Math.min((Math.abs(s.changePct) / maxAbs) * 50, 50);
+              const dir = s.direction === 'rising' ? 'up' : s.direction === 'falling' ? 'down' : 'flat';
+              return (
+                <div className="row" key={i}>
+                  <span className="name">{s.series}</span>
+                  <div className="track">
+                    <div className={`fill ${dir}`} style={{ width: dir === 'flat' ? undefined : `${widthPct}%` }} />
+                  </div>
+                  <span className={`pct ${dir}`}>{s.changePct > 0 ? '+' : ''}{s.changePct}%</span>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
 
       {report.findings?.length > 0 && (
         <>
