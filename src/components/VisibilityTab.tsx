@@ -24,7 +24,6 @@ const ENGINES: EngineDef[] = [
   { key: 'chatgpt:gpt-5.4-mini', label: 'ChatGPT', short: 'GPT', family: 'conversational', live: true },
   { key: 'gemini:gemini-3.5-flash', label: 'Gemini', short: 'Gem', family: 'conversational', live: true },
   { key: 'perplexity:sonar-pro', label: 'Perplexity', short: 'Plx', family: 'conversational', live: true },
-  { key: 'grok:cloro', label: 'Grok', short: 'Grk', family: 'conversational', live: true },
   { key: 'copilot:cloro', label: 'Copilot', short: 'Cop', family: 'conversational', live: true },
 ]
 
@@ -609,6 +608,7 @@ export default function VisibilityTab({ clientId }: { clientId: string }) {
     </div>
   )
 }
+
 
 
 

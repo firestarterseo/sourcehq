@@ -9,12 +9,10 @@ export const GEMINI_MODEL = 'gemini-3.5-flash'
 const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const CLORO_GOOGLE = 'https://api.cloro.dev/v1/monitor/google'
 const CLORO_AIMODE = 'https://api.cloro.dev/v1/monitor/aimode'
-const CLORO_GROK = 'https://api.cloro.dev/v1/monitor/grok'
 const CLORO_COPILOT = 'https://api.cloro.dev/v1/monitor/copilot'
 
 export const AIO_ENGINE_KEY = 'google_ai_overviews:cloro'
 export const AIMODE_ENGINE_KEY = 'google_ai_mode:cloro'
-export const GROK_ENGINE_KEY = 'grok:cloro'
 export const COPILOT_ENGINE_KEY = 'copilot:cloro'
 
 export function adminClient() {
@@ -239,43 +237,6 @@ async function queryAIMode(keyword: string): Promise<{ answer: string; citations
     const data = await res.json()
     if (data?.success !== true) {
       throw new Error(`cloro aimode non-success: ${JSON.stringify(data?.error || {}).slice(0, 200)}`)
-    }
-    const result = data?.result
-    if (!result) return { answer: '', citations: [] }
-    const answer = typeof result.markdown === 'string' && result.markdown
-      ? result.markdown
-      : (typeof result.text === 'string' ? result.text : '')
-    const sources = Array.isArray(result.sources) ? result.sources : []
-    const citations = sources.map((s: any) => s?.url).filter((u: any) => typeof u === 'string')
-    return { answer, citations: Array.from(new Set(citations)) }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-async function queryGrok(keyword: string): Promise<{ answer: string; citations: string[] }> {
-  const apiKey = process.env.CLORO_API_KEY
-  if (!apiKey) throw new Error('CLORO_API_KEY not configured')
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 120000)
-  try {
-    const res = await fetch(CLORO_GROK, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: keyword,
-        country: 'US',
-        include: { markdown: true },
-      }),
-      signal: controller.signal,
-    })
-    if (!res.ok) {
-      const body = await res.text()
-      throw new Error(`cloro grok ${res.status}: ${body.slice(0, 200)}`)
-    }
-    const data = await res.json()
-    if (data?.success !== true) {
-      throw new Error(`cloro grok non-success: ${JSON.stringify(data?.error || {}).slice(0, 200)}`)
     }
     const result = data?.result
     if (!result) return { answer: '', citations: [] }
@@ -520,14 +481,6 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
       })())
       jobs.push((async () => {
         try {
-          const { answer, citations } = await queryGrok(p.prompt_text)
-          await recordRun(db, clientId, p.id, p.prompt_text, GROK_ENGINE_KEY, brand, domain, answer, citations, results)
-        } catch (err: any) {
-          results.push({ engine: GROK_ENGINE_KEY, prompt: p.prompt_text, error: err.message })
-        }
-      })())
-      jobs.push((async () => {
-        try {
           const { answer, citations } = await queryCopilot(p.prompt_text)
           await recordRun(db, clientId, p.id, p.prompt_text, COPILOT_ENGINE_KEY, brand, domain, answer, citations, results)
         } catch (err: any) {
@@ -565,7 +518,6 @@ async function queryOneEngine(engine: string, promptText: string): Promise<{ ans
   if (engine.startsWith('perplexity:')) return queryPerplexity(promptText)
   if (engine.startsWith('chatgpt:')) return queryChatGPT(promptText)
   if (engine.startsWith('gemini:')) return queryGemini(promptText)
-  if (engine.startsWith('grok:')) return queryGrok(promptText)
   if (engine.startsWith('copilot:')) return queryCopilot(promptText)
   if (engine.startsWith('google_ai_mode:')) return queryAIMode(promptText)
   if (engine.startsWith('google_ai_overviews:')) return queryAIOverviewCloro(promptText)
@@ -652,8 +604,7 @@ function enginesForEnv(): string[] {
   if (process.env.GEMINI_API_KEY) engines.push(`gemini:${GEMINI_MODEL}`)
   if (process.env.CLORO_API_KEY) engines.push(AIO_ENGINE_KEY)
   if (process.env.CLORO_API_KEY) engines.push(AIMODE_ENGINE_KEY)
-  if (process.env.CLORO_API_KEY) engines.push(GROK_ENGINE_KEY)
-  if (process.env.CLORO_API_KEY) engines.push(COPILOT_ENGINE_KEY)
+    if (process.env.CLORO_API_KEY) engines.push(COPILOT_ENGINE_KEY)
   return engines
 }
 
@@ -725,6 +676,9 @@ export async function enqueueClientVisibility(db: any, clientId: string, trigger
 
   return { ok: true, batchId: batch.id, totalJobs, published: insertedJobs.length - pubFailures.length, publishError }
 }
+
+
+
 
 
 
