@@ -8,6 +8,7 @@ import GenerateReportButton from '@/components/GenerateReportButton'
 import DataSourceTiles from '@/components/DataSourceTiles'
 import VisibilityTab from '@/components/VisibilityTab'
 import DistributionTab from '@/components/DistributionTab'
+import SearchableSelect from '@/components/SearchableSelect'
 import { REGIONS } from '@/lib/regions'
 import { Search, BarChart3, Phone, Link2 } from 'lucide-react'
 
@@ -393,11 +394,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Search Console property</label>
-                <select value={selGsc} onChange={e => setSelGsc(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.gscSites || []).map((s: any) => <option key={s.url} value={s.url}>{s.url}{options.multiAccount ? ' (' + s.account + ')' : ''}</option>)}</select>
+                <SearchableSelect value={selGsc} onChange={setSelGsc} placeholder="Select a property..." options={(options.gscSites || []).map((s: any) => ({ value: s.url, label: s.url + (options.multiAccount ? ' (' + s.account + ')' : '') }))} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Analytics (GA4) property</label>
-                <select value={selGa4} onChange={e => setSelGa4(e.target.value)} style={selectStyle}><option value="">Select a property...</option>{(options.ga4Properties || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}{options.multiAccount ? ' (' + p.account + ')' : ''}</option>)}</select>
+                <SearchableSelect value={selGa4} onChange={setSelGa4} placeholder="Select a property..." options={(options.ga4Properties || []).map((p: any) => ({ value: p.id, label: p.name + (options.multiAccount ? ' (' + p.account + ')' : '') }))} />
               </div>
               <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Business Profile location</label>
@@ -442,6 +443,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
+
 
 
 
