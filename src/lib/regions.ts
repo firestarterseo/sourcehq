@@ -15,9 +15,11 @@ export const REGIONS: RegionDef[] = [
   { key: 'phoenix',      label: 'Phoenix, AZ',             lat: 33.4484, lon: -112.0740, timezone: 'America/Phoenix',  fredUnemployment: 'PHOE004URN' },
   { key: 'dallas',       label: 'Dallas-Fort Worth, TX',   lat: 32.7767, lon: -96.7970,  timezone: 'America/Chicago',  fredUnemployment: 'DALL148URN' },
   { key: 'atlanta',      label: 'Atlanta, GA',             lat: 33.7490, lon: -84.3880,  timezone: 'America/New_York', fredUnemployment: 'ATLA013URN' },
+  { key: 'chicago',      label: 'Chicago Metro, IL',       lat: 41.8781, lon: -87.6298,  timezone: 'America/Chicago',  fredUnemployment: 'CHIC917URN' },
   { key: 'national',     label: 'National (US)',           lat: 39.8283, lon: -98.5795,  timezone: 'America/Chicago',  fredUnemployment: null },
 ]
 
 export function getRegion(key: string | null | undefined): RegionDef {
   return REGIONS.find(r => r.key === key) || REGIONS.find(r => r.key === 'national')!
 }
+
