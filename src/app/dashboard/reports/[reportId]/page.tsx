@@ -21,6 +21,7 @@ type Content = (Partial<SourceReport> & { report_type?: string }) & InternalCont
 
 interface Report {
   id: string
+  client_id?: string
   title: string
   period: string | null
   created_at: string
@@ -80,6 +81,7 @@ function InternalSection({ title, items, color }: { title: string; items?: strin
 export default function ReportPage({ params }: { params: Promise<{ reportId: string }> }) {
   const { reportId } = use(params)
   const [report, setReport] = useState<Report | null>(null)
+  const [clientName, setClientName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [schemaCopied, setSchemaCopied] = useState(false)
@@ -92,7 +94,13 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
   useEffect(() => {
     fetch(`/api/reports/${reportId}`)
       .then(r => r.json())
-      .then(data => { setReport(data.report || null); setLoading(false) })
+      .then(data => {
+        setReport(data.report || null)
+        setLoading(false)
+        if (data.report?.client_id) {
+          fetch(`/api/clients/${data.report.client_id}`).then(r => r.json()).then(d => setClientName(d.client?.name || null)).catch(() => {})
+        }
+      })
       .catch(() => setLoading(false))
   }, [reportId])
 
@@ -176,7 +184,7 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
         <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-            <Link href="/dashboard/reports" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', flexShrink: 0 }}>← Reports</Link>
+            <Link href={report?.client_id ? `/dashboard/clients/${report.client_id}?tab=content` : "/dashboard/reports"} style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', flexShrink: 0 }}>← {clientName || 'Reports'}</Link>
             {report && (
               <>
                 <span style={{ color: '#E5E5E3' }}>|</span>
@@ -262,4 +270,8 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     </div>
   )
 }
+
+
+
+
 

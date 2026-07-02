@@ -72,8 +72,9 @@ const selectStyle = {
 } as const
 const inputStyle = selectStyle
 
-export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ClientDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const { id } = use(params)
+  const { tab: tabParam } = use(searchParams)
   const router = useRouter()
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
@@ -83,7 +84,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', industry: '', website: '', region: '' })
-  const [activeTab, setActiveTab] = useState<'overview' | 'visibility' | 'content' | 'distribution' | 'sources'>('visibility')
+  const validTabs = ['overview', 'visibility', 'content', 'distribution', 'sources'] as const
+  const initialTab = (validTabs as readonly string[]).includes(tabParam || '') ? (tabParam as typeof validTabs[number]) : 'visibility'
+  const [activeTab, setActiveTab] = useState<'overview' | 'visibility' | 'content' | 'distribution' | 'sources'>(initialTab)
 
   const [reports, setReports] = useState<ReportRow[] | null>(null)
   const [confirmReportId, setConfirmReportId] = useState<string | null>(null)
@@ -499,3 +502,4 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+

@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   const scopes = [
     'https://www.googleapis.com/auth/webmasters.readonly',
     'https://www.googleapis.com/auth/analytics.readonly',
+    'https://www.googleapis.com/auth/business.manage',
   ].join(' ')
   const state = next ? `${clientId}|${next}` : clientId
   const params = new URLSearchParams({
@@ -23,3 +24,4 @@ export async function GET(request: NextRequest) {
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
   return NextResponse.redirect(authUrl)
 }
+
