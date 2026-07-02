@@ -27,9 +27,10 @@ interface Props {
   onManageCallrail: () => void
   // called when user clicks Manage on Google (property picker)
   onManageGoogle: () => void
+  onManageGbp: () => void
 }
 
-export default function DataSourceTiles({ clientId, status, googleConnected, googleConnectHref, onManageCallrail, onManageGoogle }: Props) {
+export default function DataSourceTiles({ clientId, status, googleConnected, googleConnectHref, onManageCallrail, onManageGoogle, onManageGbp }: Props) {
   const [showCatalog, setShowCatalog] = useState(false)
 
   const isConnected = (s: DataSourceDef) => {
@@ -67,7 +68,9 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
         </div>
         <div style={{ marginTop: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
           {s.dataRoute && <Link href={`/dashboard/clients/${clientId}/data/${s.dataRoute}`} style={linkStyle}>View data</Link>}
-          {isGoogle
+          {s.key === 'gbp'
+            ? <button onClick={onManageGbp} style={manageStyle}>Manage</button>
+            : isGoogle
             ? <button onClick={onManageGoogle} style={manageStyle}>Manage</button>
             : s.key === 'callrail'
               ? <button onClick={onManageCallrail} style={manageStyle}>Manage</button>
@@ -133,7 +136,7 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
                               <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Coming soon</span>
                             ) : s.googleBacked ? (
                               googleConnected
-                                ? <button onClick={() => { setShowCatalog(false); onManageGoogle() }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Set up</button>
+                                ? <button onClick={() => { setShowCatalog(false); s.key === 'gbp' ? onManageGbp() : onManageGoogle() }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif' }}>Set up</button>
                                 : <a href={googleConnectHref} style={{ background: '#6D28D9', color: '#fff', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>Connect Google</a>
                             ) : s.key === 'callrail' ? (
                               <button onClick={() => { setShowCatalog(false); onManageCallrail() }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Connect</button>
@@ -152,3 +155,4 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
     </div>
   )
 }
+

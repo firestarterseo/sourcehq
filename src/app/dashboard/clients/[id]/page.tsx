@@ -10,7 +10,6 @@ import VisibilityTab from '@/components/VisibilityTab'
 import DistributionTab from '@/components/DistributionTab'
 import SearchableSelect from '@/components/SearchableSelect'
 import { REGIONS } from '@/lib/regions'
-import { Search, BarChart3, Phone, Link2 } from 'lucide-react'
 
 interface Client {
   id: string
@@ -91,14 +90,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null)
 
   const [googleConnected, setGoogleConnected] = useState(false)
+
   const [options, setOptions] = useState<PropertyOptions | null>(null)
   const [propsLoaded, setPropsLoaded] = useState(false)
   const [selGsc, setSelGsc] = useState('')
   const [selGa4, setSelGa4] = useState('')
   const [savingProps, setSavingProps] = useState(false)
-  const [gbpLocations, setGbpLocations] = useState<GbpLocations | null>(null)
-  const [selGbp, setSelGbp] = useState('')
   const [showGooglePicker, setShowGooglePicker] = useState(false)
+
+  const [gbpLocations, setGbpLocations] = useState<GbpLocations | null>(null)
+  const [gbpLoaded, setGbpLoaded] = useState(false)
+  const [selGbp, setSelGbp] = useState('')
+  const [savingGbp, setSavingGbp] = useState(false)
+  const [showGbpPicker, setShowGbpPicker] = useState(false)
 
   const [callrail, setCallrail] = useState<CallRailData | null>(null)
   const [crCompanies, setCrCompanies] = useState<CallRailCompanies | null>(null)
@@ -136,8 +140,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     loadCallrail()
   }
 
-  // Heavy: full Google property enumeration + GBP locations. Only called when
-  // the Google picker is opened, never on initial page load.
+  // Heavy: full GSC/GA4 property enumeration. Only called when that picker opens.
   function loadGoogleProperties() {
     fetch(`/api/clients/${id}/google-properties`)
       .then(r => r.json())
@@ -149,8 +152,20 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         if (data.selected?.ga4) setSelGa4(data.selected.ga4)
       })
       .catch(() => { setOptions(null); setPropsLoaded(true) })
+  }
 
-    fetch(`/api/clients/${id}/gbp-locations`).then(r => r.json()).then(d => { setGbpLocations(d); if (d.selected) setSelGbp(d.selected) }).catch(() => setGbpLocations(null))
+  // Heavy: GBP location enumeration across every connected agency account.
+  // Separate from Google properties above since a client's Business Profile
+  // can live under a different verified Google login than their GSC/GA4.
+  function loadGbpLocations() {
+    fetch(`/api/clients/${id}/gbp-locations`)
+      .then(r => r.json())
+      .then(d => {
+        setGbpLocations(d)
+        setGbpLoaded(true)
+        if (d.selected) setSelGbp(d.selected)
+      })
+      .catch(() => { setGbpLocations(null); setGbpLoaded(true) })
   }
 
   // Heavy: CallRail company list. Only when the CallRail form opens.
@@ -178,11 +193,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  // Lazy-load the heavy Google property list the first time the picker opens.
+  // Lazy-load the heavy GSC/GA4 property list the first time that picker opens.
   useEffect(() => {
     if (showGooglePicker && !propsLoaded) loadGoogleProperties()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showGooglePicker])
+
+  // Lazy-load GBP locations the first time that picker opens.
+  useEffect(() => {
+    if (showGbpPicker && !gbpLoaded) loadGbpLocations()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGbpPicker])
 
   // Lazy-load CallRail companies the first time the CallRail form opens.
   useEffect(() => {
@@ -193,13 +214,26 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   async function handleSaveProperties() {
     setSavingProps(true)
     const ga4Name = options?.ga4Properties?.find((p: any) => p.id === selGa4)?.name || null
-      const gAccount = options?.ga4Properties?.find((p: any) => p.id === selGa4)?.account || options?.gscSites?.find((s: any) => s.url === selGsc)?.account || null
+    const gAccount = options?.ga4Properties?.find((p: any) => p.id === selGa4)?.account || options?.gscSites?.find((s: any) => s.url === selGsc)?.account || null
     await fetch(`/api/clients/${id}/google-properties`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gsc_property: selGsc || null, ga4_property: selGa4 || null, ga4_property_name: ga4Name, google_account: gAccount }),
     })
     setSavingProps(false)
-    const gbpMatch = gbpLocations?.locations?.find(l => l.id === selGbp); const gbpName = gbpMatch?.name || null; const gbpAccount = gbpMatch?.account || null; await fetch(`/api/clients/${id}/gbp-locations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName, gbp_google_account: gbpAccount }) }); setShowGooglePicker(false)
+    setShowGooglePicker(false)
+  }
+
+  async function handleSaveGbp() {
+    setSavingGbp(true)
+    const gbpMatch = gbpLocations?.locations?.find(l => l.id === selGbp)
+    const gbpName = gbpMatch?.name || null
+    const gbpAccount = gbpMatch?.account || null
+    await fetch(`/api/clients/${id}/gbp-locations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName, gbp_google_account: gbpAccount }),
+    })
+    setSavingGbp(false)
+    setShowGbpPicker(false)
   }
 
   async function handleConnectCallrail() {
@@ -274,9 +308,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 
-  const tileBase = { background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column' as const, gap: '8px', minHeight: '96px' }
-  const dot = (on: boolean) => ({ width: '8px', height: '8px', borderRadius: '50%', background: on ? '#10B981' : '#D1D5DB', flexShrink: 0 })
-
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
       <Sidebar active="Clients" email="" />
@@ -300,7 +331,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           ))}
         </div>
 
-        <div style={{ padding: '32px', maxWidth: '1080px' }}>          {error && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>}
+        <div style={{ padding: '32px', maxWidth: '1080px' }}>
+          {error && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#991B1B' }}>{error}</div>}
 
           {showDeleteConfirm && (
             <div style={{ background: '#FEF2F2', border: '0.5px solid #FECACA', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
@@ -391,11 +423,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             googleConnectHref={`/api/auth/google?clientId=${id}`}
             status={{ connected: { gsc: googleConnected, ga4: googleConnected, gbp: googleConnected, callrail: crConnected }, detail: { callrail: callrail?.accountName } }}
             onManageGoogle={() => setShowGooglePicker(!showGooglePicker)}
+            onManageGbp={() => setShowGbpPicker(!showGbpPicker)}
             onManageCallrail={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }}
           />
 
           {showGooglePicker && googleConnected && (
             <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '20px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', fontWeight: '600', color: '#0D1B3E', margin: 0 }}>Search Console &amp; Analytics</h3>
               {!propsLoaded ? (
                 <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>Loading properties...</p>
               ) : !options?.connected ? (
@@ -410,16 +444,28 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Analytics (GA4) property</label>
                 <SearchableSelect value={selGa4} onChange={setSelGa4} placeholder="Select a property..." options={(options.ga4Properties || []).map((p: any) => ({ value: p.id, label: p.name + (options.multiAccount ? ' (' + p.account + ')' : '') }))} />
               </div>
-              <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Business Profile location</label>
-                  {gbpLocations?.available ? (
-                    <SearchableSelect value={selGbp} onChange={setSelGbp} placeholder="Select a location..." options={(gbpLocations.locations || []).map(l => ({ value: l.id, label: l.name + (gbpLocations.multiAccount ? ' (' + l.account + ')' : '') }))} />
-                  ) : (
-                    <p style={{ fontSize: '12px', color: '#92400E', margin: 0 }}>{gbpLocations?.pending ? 'Business Profile API access pending Google approval.' : (gbpLocations?.error || 'Loading locations...')}</p>
-                  )}
-                </div>
-                <div><button onClick={handleSaveProperties} disabled={savingProps} style={{ background: savingProps ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{savingProps ? 'Saving...' : 'Save properties'}</button></div>
+              <div><button onClick={handleSaveProperties} disabled={savingProps} style={{ background: savingProps ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{savingProps ? 'Saving...' : 'Save properties'}</button></div>
               </>
+              )}
+            </div>
+          )}
+
+          {showGbpPicker && googleConnected && (
+            <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '20px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', fontWeight: '600', color: '#0D1B3E', margin: 0 }}>Business Profile</h3>
+              <p style={{ fontSize: '11px', color: '#9CA3AF', margin: '-8px 0 0' }}>Can use a different connected Google account than Search Console/Analytics.</p>
+              {!gbpLoaded ? (
+                <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>Loading locations...</p>
+              ) : gbpLocations?.available ? (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Business Profile location</label>
+                    <SearchableSelect value={selGbp} onChange={setSelGbp} placeholder="Select a location..." options={(gbpLocations.locations || []).map(l => ({ value: l.id, label: l.name + (gbpLocations.multiAccount ? ' (' + l.account + ')' : '') }))} />
+                  </div>
+                  <div><button onClick={handleSaveGbp} disabled={savingGbp} style={{ background: savingGbp ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{savingGbp ? 'Saving...' : 'Save location'}</button></div>
+                </>
+              ) : (
+                <p style={{ fontSize: '12px', color: '#92400E', margin: 0 }}>{gbpLocations?.pending ? (gbpLocations?.error || 'Business Profile API access pending Google approval.') : (gbpLocations?.error || 'Loading locations...')}</p>
               )}
             </div>
           )}
@@ -428,7 +474,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <div style={{ background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '20px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {callrailError && <div style={{ background: '#FEE2E2', border: '0.5px solid #FECACA', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#991B1B' }}>{callrailError}</div>}
               <div style={{ display: 'flex', gap: '16px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0D1B3E', cursor: 'pointer' }}><input type="radio" checked={crMode === 'agency'} onChange={() => setCrMode('agency')} />Firestarter CallRail access</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0D1B3E', cursor: 'pointer' }}><input type="radio" checked={crMode === 'agency'} onChange={() => setCrMode('agency')}/>Firestarter CallRail access</label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0D1B3E', cursor: 'pointer' }}><input type="radio" checked={crMode === 'standalone'} onChange={() => setCrMode('standalone')} />Client has their own</label>
               </div>
               {crMode === 'agency' ? (
@@ -444,7 +490,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <input type="password" value={callrailKey} onChange={e => setCallrailKey(e.target.value)} placeholder="From their CallRail Settings → Integrations" style={inputStyle} />
                 </div>
               )}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}><button onClick={handleConnectCallrail} disabled={callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim())} style={{ background: callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim()) ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{callrailSaving ? 'Connecting...' : 'Save & connect'}</button>{crConnected && <button onClick={handleDisconnectCallrail} style={{ background: 'transparent', color: '#DC2626', border: '0.5px solid #DC2626', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Disconnect</button>}</div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}><button onClick={handleConnectCallrail} disabled={callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim())} style={{ background: callrailSaving || (crMode === 'agency' ? !crCompanyId : !callrailKey.trim()) ? '#9CA3AF' : '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{callrailSaving ? 'Connecting...' : 'Save & connect'}</button>{crConnected && <button onClick={handleDisconnectCallrail} style={{ background: 'transparent', color: '#DC2626', border:'0.5px solid #DC2626', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Disconnect</button>}</div>
             </div>
           )}
           </>)}
@@ -453,23 +499,3 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
