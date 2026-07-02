@@ -389,7 +389,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             clientId={id}
             googleConnected={googleConnected}
             googleConnectHref={`/api/auth/google?clientId=${id}`}
-            status={{ connected: { gsc: googleConnected, ga4: googleConnected, callrail: crConnected }, detail: { callrail: callrail?.accountName } }}
+            status={{ connected: { gsc: googleConnected, ga4: googleConnected, gbp: googleConnected, callrail: crConnected }, detail: { callrail: callrail?.accountName } }}
             onManageGoogle={() => setShowGooglePicker(!showGooglePicker)}
             onManageCallrail={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }}
           />
@@ -453,6 +453,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
 
 
 
