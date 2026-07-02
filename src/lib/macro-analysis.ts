@@ -10,9 +10,13 @@
 // correlating a weather-driven demand curve against macro trends over ~12
 // points is not defensible. In that case we characterize demand by its
 // seasonal SHAPE (peak/trough) and mark macro indicators as CONTEXT-ONLY.
+//
+// Demand-anchor selection (GSC impressions -> GA4 sessions -> GBP views) now
+// happens ONCE in the caller (report route), which passes the already-chosen
+// source/label/series in here. This file only analyzes; it does not pick.
 
 type Point = { date?: string; month?: string; value: number }
-type MonthlyDemand = { month: string; value: number }
+export type MonthlyDemand = { month: string; value: number }
 
 export interface SeriesChange {
   series: string          // human label, e.g. "S&P 500"
@@ -36,8 +40,10 @@ export interface SeasonalShape {
   peakToTroughRatio: number   // peak / trough, rounded to 1 decimal
 }
 
+export type DemandSource = 'gsc_impressions' | 'ga4_sessions' | 'gbp_views' | 'none'
+
 export interface MacroAnalysis {
-  demandSource: 'gsc_impressions' | 'ga4_sessions' | 'none'
+  demandSource: DemandSource
   demandChange: SeriesChange | null
   seriesChanges: SeriesChange[]
   coMovements: CoMovement[]
@@ -125,28 +131,20 @@ const MACRO_LABELS: Record<string, string> = {
 
 export function analyzeMacro(
   econ: Record<string, Point[] | null> | null,
-  gscMonthly: MonthlyDemand[] | null | undefined,
-  ga4Monthly: MonthlyDemand[] | null | undefined,
+  demandSource: DemandSource,
+  demandLabel: string,
+  demandMonthly: MonthlyDemand[],
 ): MacroAnalysis {
-  // Pick demand anchor: GSC impressions first, GA4 sessions fallback.
-  let demandSource: MacroAnalysis['demandSource'] = 'none'
-  let demandMonthly: MonthlyDemand[] = []
-  if (Array.isArray(gscMonthly) && gscMonthly.length >= 2) {
-    demandSource = 'gsc_impressions'
-    demandMonthly = gscMonthly.filter(m => Number.isFinite(m.value))
-  } else if (Array.isArray(ga4Monthly) && ga4Monthly.length >= 2) {
-    demandSource = 'ga4_sessions'
-    demandMonthly = ga4Monthly.filter(m => Number.isFinite(m.value))
-  }
-  const demandValues = demandMonthly.map(m => Number(m.value))
+  const demandMonthlyClean = (demandMonthly || []).filter(m => Number.isFinite(m.value))
+  const demandValues = demandMonthlyClean.map(m => Number(m.value))
 
-  const seasonalShape = demandMonthly.length >= 2 ? detectSeasonal(demandMonthly) : null
+  const seasonalShape = demandMonthlyClean.length >= 2 ? detectSeasonal(demandMonthlyClean) : null
   const seasonal = seasonalShape != null
 
   // Endpoint change is only reported when NOT seasonal (it is misleading for
   // a seasonal series). Seasonal demand is characterized by seasonalShape.
   const demandChange = (!seasonal && demandValues.length >= 2)
-    ? changeOf(demandSource === 'gsc_impressions' ? 'search demand' : 'web sessions', demandValues)
+    ? changeOf(demandLabel, demandValues)
     : null
 
   const seriesChanges: SeriesChange[] = []
@@ -166,7 +164,7 @@ export function analyzeMacro(
         const macroSign = slopeSign(vals)
         let relationship: CoMovement['relationship']
         let note: string
-        const demandWord = demandSource === 'gsc_impressions' ? 'search demand' : 'web sessions'
+        const demandWord = demandLabel.toLowerCase()
         if (demandSign === 0 || macroSign === 0) {
           relationship = 'unrelated'
           note = `Over the window, ${label} showed no clear directional move relative to ${demandWord}.`

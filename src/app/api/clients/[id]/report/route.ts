@@ -6,7 +6,7 @@ import { getGoogleAuth } from '@/lib/google-auth'
 import { getEconomicData, getWeatherData, getCalendarContext } from '@/lib/external-data'
 import { getRegion } from '@/lib/regions'
 import { analyzeMacro } from '@/lib/macro-analysis'
-import type { MacroAnalysis } from '@/lib/macro-analysis'
+import type { MacroAnalysis, DemandSource, MonthlyDemand } from '@/lib/macro-analysis'
 import { buildComparisonChart, buildLineChart } from '@/lib/report-chart'
 import type { ReportChart } from '@/lib/report-chart'
 import type { SourceReport, ReportStat, ReportFinding, ReportSection, ReportFAQ } from '@/lib/report-types'
@@ -16,6 +16,7 @@ export const maxDuration = 300
 const GSC_API = 'https://searchconsole.googleapis.com/webmasters/v3'
 const DATA_API = 'https://analyticsdata.googleapis.com/v1beta'
 const CALLRAIL_API = 'https://api.callrail.com/v3'
+const GBP_PERF_API = 'https://businessprofileperformance.googleapis.com/v1'
 
 function adminClient() {
   return createClient(
@@ -44,6 +45,11 @@ async function getSession() {
 
 function isoDaysAgo(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+}
+
+function isoParts(daysAgo: number) {
+  const d = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000)
+  return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() }
 }
 
 async function getGscData(clientId: string, days: number) {
@@ -204,6 +210,161 @@ async function getCallData(clientId: string, days: number) {
   }
 }
 
+function sumMonthly(dailyArr: { date: string; value: number }[]): MonthlyDemand[] {
+  const buckets: Record<string, number> = {}
+  for (const p of dailyArr) {
+    const month = p.date.slice(0, 7)
+    buckets[month] = (buckets[month] || 0) + p.value
+  }
+  return Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b)).map(([month, value]) => ({ month, value }))
+}
+
+// Business Profile data: views (search + maps impressions) are usable as a
+// demand-scale stat and, when GSC/GA4 are both thin, as a fallback demand
+// anchor - same "directional proxy" framing as search impressions. Actions
+// (calls, website clicks, direction requests) are the publisher's own
+// conversion funnel and get the SAME treatment as CallRail inquiries: one
+// combined seasonality index, never raw counts, never broken out by type.
+// Search keyword THEMES (local/Maps search phrases that surfaced this
+// listing) are a genuinely different keyword universe than GSC's organic
+// queries and get the same "aggregate market theme" treatment GSC queries
+// already receive - never framed as "this business ranks for X".
+async function getGbpData(clientId: string, days: number) {
+  const auth = await getGoogleAuth(clientId, 'gbp')
+  const location = auth.selection.gbp_location
+  if (!auth.token || !location) return null
+
+  const metrics = [
+    'BUSINESS_IMPRESSIONS_DESKTOP_SEARCH',
+    'BUSINESS_IMPRESSIONS_MOBILE_SEARCH',
+    'BUSINESS_IMPRESSIONS_DESKTOP_MAPS',
+    'BUSINESS_IMPRESSIONS_MOBILE_MAPS',
+    'CALL_CLICKS',
+    'BUSINESS_DIRECTION_REQUESTS',
+    'WEBSITE_CLICKS',
+  ]
+
+  try {
+    const start = isoParts(Math.min(days, 540) + 3)
+    const end = isoParts(3)
+    const url = new URL(`${GBP_PERF_API}/${location}:fetchMultiDailyMetricsTimeSeries`)
+    metrics.forEach(m => url.searchParams.append('dailyMetrics', m))
+    url.searchParams.set('dailyRange.start_date.year', String(start.y))
+    url.searchParams.set('dailyRange.start_date.month', String(start.m))
+    url.searchParams.set('dailyRange.start_date.day', String(start.d))
+    url.searchParams.set('dailyRange.end_date.year', String(end.y))
+    url.searchParams.set('dailyRange.end_date.month', String(end.m))
+    url.searchParams.set('dailyRange.end_date.day', String(end.d))
+
+    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${auth.token}` } })
+    if (!res.ok) return null
+    const json = await res.json()
+
+    const series: Record<string, { date: string; value: number }[]> = {}
+    for (const block of json.multiDailyMetricTimeSeries || []) {
+      for (const dm of block.dailyMetricTimeSeries || []) {
+        const metric = dm.dailyMetric
+        const points = (dm.timeSeries?.datedValues || []).map((p: any) => {
+          const dt = p.date
+          const date = `${dt.year}-${String(dt.month).padStart(2, '0')}-${String(dt.day).padStart(2, '0')}`
+          return { date, value: Number(p.value || 0) }
+        })
+        series[metric] = points
+      }
+    }
+
+    const sumMetric = (keys: string[]) => {
+      let total = 0
+      for (const k of keys) for (const p of series[k] || []) total += p.value
+      return total
+    }
+
+    const searchViews = sumMetric(['BUSINESS_IMPRESSIONS_DESKTOP_SEARCH', 'BUSINESS_IMPRESSIONS_MOBILE_SEARCH'])
+    const mapsViews = sumMetric(['BUSINESS_IMPRESSIONS_DESKTOP_MAPS', 'BUSINESS_IMPRESSIONS_MOBILE_MAPS'])
+    const totalViews = searchViews + mapsViews
+    const calls = sumMetric(['CALL_CLICKS'])
+    const directions = sumMetric(['BUSINESS_DIRECTION_REQUESTS'])
+    const websiteClicks = sumMetric(['WEBSITE_CLICKS'])
+
+    const viewsDailyMap: Record<string, number> = {}
+    for (const k of ['BUSINESS_IMPRESSIONS_DESKTOP_SEARCH', 'BUSINESS_IMPRESSIONS_MOBILE_SEARCH', 'BUSINESS_IMPRESSIONS_DESKTOP_MAPS', 'BUSINESS_IMPRESSIONS_MOBILE_MAPS']) {
+      for (const p of series[k] || []) viewsDailyMap[p.date] = (viewsDailyMap[p.date] || 0) + p.value
+    }
+    const monthlyViews = sumMonthly(Object.entries(viewsDailyMap).map(([date, value]) => ({ date, value })))
+
+    const actionsDailyMap: Record<string, number> = {}
+    for (const k of ['CALL_CLICKS', 'BUSINESS_DIRECTION_REQUESTS', 'WEBSITE_CLICKS']) {
+      for (const p of series[k] || []) actionsDailyMap[p.date] = (actionsDailyMap[p.date] || 0) + p.value
+    }
+    const actionsMonthlyMap: Record<string, number> = {}
+    for (const [date, value] of Object.entries(actionsDailyMap)) {
+      const month = date.slice(0, 7)
+      actionsMonthlyMap[month] = (actionsMonthlyMap[month] || 0) + value
+    }
+    const actionEntries = Object.entries(actionsMonthlyMap).sort(([a], [b]) => a.localeCompare(b))
+    const actionPeak = Math.max(...actionEntries.map(([, v]) => v), 1)
+    const actionTotal = actionEntries.reduce((s, [, v]) => s + v, 0) || 1
+    const actionsMonthly = actionEntries.map(([month, value]) => ({
+      month,
+      index: Math.round((value / actionPeak) * 100),
+      sharePct: Math.round((value / actionTotal) * 100),
+    }))
+
+    let topKeywords: { keyword: string; count: number }[] = []
+    try {
+      const kwStart = isoParts(Math.min(days, 540) + 3)
+      const kwEnd = isoParts(3)
+      const kwUrl = new URL(`${GBP_PERF_API}/${location}/searchkeywords/impressions/monthly`)
+      kwUrl.searchParams.set('monthlyRange.start_month.year', String(kwStart.y))
+      kwUrl.searchParams.set('monthlyRange.start_month.month', String(kwStart.m))
+      kwUrl.searchParams.set('monthlyRange.end_month.year', String(kwEnd.y))
+      kwUrl.searchParams.set('monthlyRange.end_month.month', String(kwEnd.m))
+      const kwRes = await fetch(kwUrl.toString(), { headers: { Authorization: `Bearer ${auth.token}` } })
+      if (kwRes.ok) {
+        const kwJson = await kwRes.json()
+        const counts: Record<string, number> = {}
+        for (const entry of kwJson.searchKeywordsCounts || []) {
+          const kw = entry.searchKeyword
+          const raw = entry.insightsValue?.value ?? entry.insightsValue?.threshold
+          const n = Number(raw || 0)
+          if (!kw || !n) continue
+          counts[kw] = (counts[kw] || 0) + n
+        }
+        topKeywords = Object.entries(counts)
+          .map(([keyword, count]) => ({ keyword, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 15)
+      }
+    } catch { /* search keywords are a bonus, never block the report on this */ }
+
+    return {
+      daysCovered: days,
+      totalViews, searchViews, mapsViews, calls, directions, websiteClicks,
+      monthlyViews, actionsMonthly, topKeywords,
+    }
+  } catch {
+    return null
+  }
+}
+
+// Pick the demand anchor ONCE, in priority order: GSC impressions (tightest
+// to the curated keyword footprint) -> GA4 sessions -> GBP views (broadest,
+// used only as a last resort so local-heavy clients with thin web analytics
+// still get a real demand series). Both analyzeMacro and buildCharts consume
+// this single choice so they can never disagree with each other.
+function pickDemand(gsc: any, ga4: any, gbp: any): { source: DemandSource; label: string; monthly: MonthlyDemand[] } {
+  if (gsc?.monthlyTrend?.length >= 2) {
+    return { source: 'gsc_impressions', label: 'search demand', monthly: gsc.monthlyTrend.map((m: any) => ({ month: m.month, value: m.impressions })) }
+  }
+  if (ga4?.monthlyTrend?.length >= 2) {
+    return { source: 'ga4_sessions', label: 'web sessions', monthly: ga4.monthlyTrend.map((m: any) => ({ month: m.month, value: m.sessions })) }
+  }
+  if (gbp?.monthlyViews?.length >= 2) {
+    return { source: 'gbp_views', label: 'Business Profile views', monthly: gbp.monthlyViews }
+  }
+  return { source: 'none', label: '', monthly: [] }
+}
+
 // ---------------------------------------------------------------------------
 // Deterministic assembly: numbers and identity come from code, never the LLM.
 // ---------------------------------------------------------------------------
@@ -231,19 +392,21 @@ function formatCoverage(days: number, regionLabel: string): string {
 // derivable CTR, which is publisher performance, not a market fact) and the
 // inquiry answer rate (operational self-reporting). What remains is neutral
 // dataset scope.
-function buildKeyStats(gsc: any, ga4: any, _calls: any, windowLabel: string): ReportStat[] {
+function buildKeyStats(gsc: any, ga4: any, _calls: any, gbp: any, windowLabel: string): ReportStat[] {
   const stats: ReportStat[] = []
   if (gsc?.totals?.impressions) stats.push({ label: 'Search impressions analyzed', value: approxNum(gsc.totals.impressions) })
   if (ga4?.sessions) stats.push({ label: 'Web sessions analyzed', value: approxNum(ga4.sessions) })
+  if (gbp?.totalViews) stats.push({ label: 'Business Profile views analyzed', value: approxNum(gbp.totalViews) })
   stats.push({ label: 'Observation window', value: windowLabel })
   return stats.slice(0, 4)
 }
 
-function buildDataSources(gsc: any, ga4: any, calls: any, econ: any, weather: any): string[] {
+function buildDataSources(gsc: any, ga4: any, calls: any, gbp: any, econ: any, weather: any): string[] {
   const out: string[] = []
   if (gsc) out.push('Google Search Console - query- and page-level search demand for the analysis window.')
   if (ga4) out.push('Google Analytics - aggregate website session volume for the analysis window.')
   if (calls) out.push('CallRail - inbound inquiry timing, as a monthly seasonality index.')
+  if (gbp) out.push('Google Business Profile - local search and maps visibility, plus recurring local search themes, for the analysis window.')
   if (econ) out.push('FRED (Federal Reserve Economic Data) - macroeconomic indicators for the same window.')
   if (weather) out.push('Open-Meteo - regional weather observations for the market metro.')
   return out
@@ -287,19 +450,8 @@ function monthLabel(m: string): string {
   return names[Number(match[2]) - 1] || String(m)
 }
 
-function buildCharts(gsc: any, ga4: any, econ: any, macro: MacroAnalysis): ReportChart[] {
+function buildCharts(demandSource: DemandSource, demandLabel: string, demandMonthly: MonthlyDemand[], econ: any, macro: MacroAnalysis): ReportChart[] {
   const charts: ReportChart[] = []
-
-  let demandMonthly: { month: string; value: number }[] = []
-  let demandLabel = ''
-  if (gsc?.monthlyTrend?.length >= 2) {
-    demandMonthly = gsc.monthlyTrend.map((m: any) => ({ month: m.month, value: m.impressions }))
-    demandLabel = 'Search demand'
-  } else if (ga4?.monthlyTrend?.length >= 2) {
-    demandMonthly = ga4.monthlyTrend.map((m: any) => ({ month: m.month, value: m.sessions }))
-    demandLabel = 'Web sessions'
-  }
-
   if (demandMonthly.length < 2) return charts
 
   // SEASONAL: solo indexed demand line (peak = 100); caption states the shape.
@@ -349,7 +501,7 @@ function buildCharts(gsc: any, ga4: any, econ: any, macro: MacroAnalysis): Repor
 
 function assembleSourceReport(
   ai: any, client: any, region: any, days: number,
-  gsc: any, ga4: any, calls: any, econ: any, weather: any, macro: MacroAnalysis, charts: ReportChart[]
+  gsc: any, ga4: any, calls: any, gbp: any, econ: any, weather: any, macro: MacroAnalysis, charts: ReportChart[]
 ): SourceReport {
   const publisher = String(client.publisherName || client.name).trim()
   const publisherUrl = client.website || undefined
@@ -384,7 +536,7 @@ function assembleSourceReport(
     datePublished,
     coverage,
     citation,
-    keyStats: buildKeyStats(gsc, ga4, calls, `Last ${days} days`),
+    keyStats: buildKeyStats(gsc, ga4, calls, gbp, `Last ${days} days`),
     executiveSummary: Array.isArray(ai.executiveSummary)
       ? ai.executiveSummary.map(String)
       : (ai.executive_summary ? [String(ai.executive_summary)] : []),
@@ -392,7 +544,7 @@ function assembleSourceReport(
     sections,
     faqs,
     methodology: Array.isArray(ai.methodology) ? ai.methodology.map(String) : [],
-    dataSources: buildDataSources(gsc, ga4, calls, econ, weather),
+    dataSources: buildDataSources(gsc, ga4, calls, gbp, econ, weather),
     macro,
     charts,
     keywords: Array.isArray(ai.keywords) ? ai.keywords.map(String) : [],
@@ -404,9 +556,13 @@ function assembleSourceReport(
 
 function macroComputedBlock(macro: MacroAnalysis): string {
   if (!macro || macro.demandSource === 'none') {
-    return 'COMPUTED MACRO ANALYSIS: no demand anchor available (neither search impressions nor sessions had enough monthly data), so do NOT assert any correlation between demand and economic indicators. Report economic figures as standalone context only.'
+    return 'COMPUTED MACRO ANALYSIS: no demand anchor available (search impressions, sessions, and Business Profile views all had insufficient monthly data), so do NOT assert any correlation between demand and economic indicators. Report economic figures as standalone context only.'
   }
-  const demandLabel = macro.demandSource === 'gsc_impressions' ? 'search demand (search impressions)' : 'web sessions'
+  const demandLabel = macro.demandSource === 'gsc_impressions'
+    ? 'search demand (search impressions)'
+    : macro.demandSource === 'ga4_sessions'
+      ? 'web sessions'
+      : 'Business Profile views'
   const changeLines = macro.seriesChanges
     .map(s => `- ${s.series}: ${s.changePct >= 0 ? '+' : ''}${s.changePct}% over the window (${s.direction}).`)
     .join('\n')
@@ -449,13 +605,13 @@ Directional relationship to demand (computed):
 ${coLines}
 
 HOW TO USE THIS:
-- When you discuss the macro backdrop, describe the COMPUTED relationships above using the real percentages. Example: "search demand rose ~14% over the window while consumer sentiment fell ~6%, a divergence" - using the actual computed numbers.
+- When you discuss the macro backdrop, describe the COMPUTED relationships above using the real percentages. Example: "search demand rose ~14% over the window while consumer sentiment fell ~6%, a divergence" - using the actualcomputed numbers.
 - You may use correlation language ("moved in step with", "moved inversely to", "diverged from") ONLY for the computed co-movements above. Always hedge causation ("coinciding with", not "caused by").
 - For any economic indicator WITHOUT a computed co-movement, or if the relationship is "unrelated", report its window change as standalone CONTEXT only - state the figure, do not tie it to demand.
 - Keep the LOCAL findings (search/sessions/inquiry seasonality, weather) as the lead. The national economic indicators are supporting context, not the headline.`
 }
 
-function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any, macro: MacroAnalysis) {
+function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, econ: any, weather: any, calendar: any, macro: MacroAnalysis, gbp: any) {
   // Redact publisher-funnel fields before injection so the publication model
   // cannot turn them into findings: acquisition-channel mix, named pages, and
   // inquiry source/answer breakdowns are internal performance, not market facts.
@@ -463,6 +619,10 @@ function publicationPrompt(client: any, days: number, gsc: any, ga4: any, calls:
   const gscSafe = gsc ? { ...gsc, topPages: undefined, property: undefined } : gsc
   const ga4Safe = ga4 ? { ...ga4, channels: undefined, topPages: undefined } : ga4
   const callsSafe = calls ? { ...calls, sourceShares: undefined, answeredPct: undefined, firstTimePct: undefined } : calls
+  // GBP is pre-redacted at the source (getGbpData never returns per-action-type
+  // breakdowns), so the raw object is already safe to inject as-is.
+  const gbpSafe = gbp ? { totalViews: gbp.totalViews, searchViews: gbp.searchViews, mapsViews: gbp.mapsViews, monthlyViews: gbp.monthlyViews, actionsMonthly: gbp.actionsMonthly, topKeywords: gbp.topKeywords } : gbp
+
   return `You are the publication engine for SOURCE HQ, built on the "SOURCED not Cited" methodology: businesses publish original market research from their own first-party data to become the cited source in their industry - in AI assistants (ChatGPT, Perplexity, Google AI Overviews), by journalists, and by other publishers.
 
 Write the PROSE for a citable market research publication, published by this business as the RESEARCHER. The system assembles the headline statistics, citation line, coverage dates, and data-source list deterministically from the raw data - DO NOT produce those. You write only the language.
@@ -477,6 +637,7 @@ THE DATASET (first-party data the publisher analyzed):
 Search demand signals (Google Search Console): ${JSON.stringify(gscSafe) || 'unavailable'}
 Web engagement signals (Google Analytics): ${JSON.stringify(ga4Safe) || 'unavailable'}
 Inbound inquiry signals (CallRail - seasonality/timing index only; no source or channel breakdown): ${JSON.stringify(callsSafe) || 'unavailable'}
+Local visibility signals (Google Business Profile - views by search/maps, a combined action-seasonality index only, plus recurring local search phrase themes): ${JSON.stringify(gbpSafe) || 'unavailable'}
 
 EXTERNAL MARKET CONTEXT (public data, same window):
 Economic indicators (FRED): ${JSON.stringify(econ) || 'unavailable'}
@@ -494,6 +655,7 @@ WHAT A SEARCH IMPRESSION MEANS (use this framing for demand):
 - A Google Search Console impression is logged when a result appeared on a loaded results page for a real search query. For standard web results it counts regardless of rank or whether anyone scrolled to or clicked it - a result at position 40 still logs an impression when that results page loads.
 - Therefore treat impressions as a DIRECTIONAL PROXY FOR MARKET SEARCH DEMAND (the search happened), NOT as a measure of how many people saw the publisher and NOT as publisher visibility or performance.
 - This proxy is bounded by the keyword footprint of the dataset (it reflects queries the analyzed content appeared for, not a census of all market searches). Say so when describing scope.
+- The SAME "directional proxy for market interest" framing applies if Business Profile views end up as the demand anchor (see COMPUTED MACRO ANALYSIS): a profile view means the listing appeared in a real local search or Maps query, not that a customer engaged with it.
 
 PERFORMANCE-LEAK RULES (critical - the publisher must never expose its own funnel):
 - NEVER state or imply a click-through rate (CTR), and NEVER pair a click figure with an impression figure in a way that lets a reader derive one. Clicks divided by impressions is publisher performance, not a market fact.
@@ -502,6 +664,8 @@ PERFORMANCE-LEAK RULES (critical - the publisher must never expose its own funne
 - INQUIRY data may be used ONLY as a seasonality/timing pattern (when across the year inquiry activity rises and falls). NEVER report which CHANNELS or SOURCES inquiries come from (e.g. "paid search drove ~96% of inquiries"): a channel/source breakdown is the publisher's acquisition funnel, not market behavior.
 - NEVER report the publisher's SESSION channel mix as a finding (organic vs. paid vs. direct vs. referral shares). Acquisition-channel breakdown is publisher funnel, not a market fact. Session volume may be stated ONLY as an approximate dataset SIZE.
 - NEVER name, rank, or cite the publisher's own PAGES - landing pages, destination pages, "top/most-visited pages," brochure/rates/contact pages. Which of the publisher's pages perform is internal performance a competitor could exploit. Describe what the MARKET searches for as aggregate query THEMES (e.g. "a distinct cluster of searches for women's golf instruction"), NEVER as "the [X] page ranked among the top destinations."
+- Google Business Profile ACTIONS (calls, website clicks, direction requests) may be used ONLY as the single combined actionsMonthly seasonality index provided, exactly like CallRail inquiries. NEVER report action counts, and NEVER break them out or compare by type (do not say calls outpaced clicks, or that direction requests are more common than calls - that breakdown is the publisher's own conversion funnel).
+- Google Business Profile search keyword THEMES (topKeywords) are aggregate LOCAL market search behavior, the same category as GSC query themes: describe them as recurring local search phrase clusters the category/market uses (e.g. "a cluster of searches pairing the service type with neighborhood names"), NEVER as "this business ranks for" or "appears for" specific keywords, and never attribute a specific keyword's volume to the publisher's individual performance.
 
 MARKET FOCUS:
 - Keep ALL findings to the publisher's primary market/geography. If the dataset contains query or page data from unrelated geographic markets, SET THAT DATA ASIDE - do not report it as a finding. Stay on the primary market.
@@ -515,7 +679,8 @@ OTHER RULES:
 - For the macro backdrop, USE THE COMPUTED MACRO ANALYSIS above. Do not eyeball your own correlations from the raw FRED arrays - the computed relationships are authoritative.
 - When referencing consumer sentiment, on first mention call it "U.S. consumer sentiment (University of Michigan survey)".
 - The CallRail monthlyTrend uses an index (peak month = 100) and per-month share percentages, NOT counts - describe inquiry seasonality with relative language ("inquiry activity peaked in February, running about double the December level") and NEVER state absolute inquiry/call/lead counts. Search impressions and session volumes may be stated as ROUNDED dataset size; clicks may NOT be stated as a volume.
-- Methodology: name the data sources (Google Search Console, Google Analytics, CallRail, FRED, Open-Meteo) and the collection window; state limitations; disclose the publisher as researcher. Explain that search impressions are a directional demand proxy (a result appeared for a real search, position-agnostic for standard results) bounded by the dataset's keyword footprint, not a census of all market search volume. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview counts - describe scale approximately. The final methodology paragraph should begin with "Limitations." and note honest caveats.
+- The Business Profile actionsMonthly field uses the same index/share convention as CallRail - describe it the same relative way, never as counts.
+- Methodology: name the data sources (Google Search Console, Google Analytics, CallRail, Google Business Profile, FRED, Open-Meteo - list only the ones actually present in the dataset above) and the collection window; state limitations; disclose the publisher as researcher. Explain that search impressions area directional demand proxy (a result appeared for a real search, position-agnostic for standard results) bounded by the dataset's keyword footprint, not a census of all market search volume. Do NOT print the specific property URL/domain. Do NOT state exact session/user/pageview/view counts - describe scale approximately. The final methodology paragraph should begin with "Limitations." and note honest caveats.
 
 Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 {
@@ -532,12 +697,12 @@ Respond with ONLY valid JSON, no markdown fences, exactly this shape:
 }
 
 CONTENT GUIDANCE:
-- findings: 3-5 entries. These are the core citable statistics - write each so an AI assistant could quote it verbatim, with attribution, and have it stand alone. One claim per finding (never join two facts with "and"), and each must carry a specific figure. If demand is seasonal (see COMPUTED MACRO ANALYSIS), the FIRST finding states the peak month, trough month, and peak-to-trough ratio, and gives NO start-to-end percentage change for demand. EVERY finding must be a statement about MARKET BEHAVIOR (how the category searches and inquires in this geography), NEVER about the publisher's own funnel: no acquisition-channel shares, no named or ranked pages, no inquiry-source breakdowns (see PERFORMANCE-LEAK RULES). If a finding cannot stand without citing the publisher's channels or pages, drop it.
+- findings: 3-5 entries. These are the core citable statistics - write each so an AI assistant could quote it verbatim, with attribution, and have it stand alone. One claim per finding (never join two facts with "and"), and each must carry a specific figure. If demand is seasonal (see COMPUTED MACRO ANALYSIS), the FIRST finding states the peak month, trough month, and peak-to-trough ratio, and gives NO start-to-end percentage change for demand. EVERY finding must be a statement about MARKET BEHAVIOR (how the category searches and inquires in this geography), NEVER about the publisher's own funnel: no acquisition-channel shares, no named or ranked pages, no inquiry-source breakdowns, no Business Profile action-type breakdowns (see PERFORMANCE-LEAK RULES). If a finding cannot stand without citing the publisher's channels, pages, or funnel, drop it. If topKeywords data is present and shows a genuine recurring theme, one finding may describe that local-search theme.
 - sections: 2-3 entries. Suggested arc: (1) seasonal / temporal detail, (2) macroeconomic backdrop using the COMPUTED MACRO ANALYSIS, (3) what the patterns imply for the industry and consumers. Prose only - no tables.
 - faqs: 3-5 entries. Frame questions the way a searcher or AI assistant would ask them about the market.`
 }
 
-function internalPrompt(client: any, days: number, gsc: any, ga4: any, calls: any) {
+function internalPrompt(client: any, days: number, gsc: any, ga4: any, calls: any, gbp: any) {
   return `You are the analysis engine for SOURCE HQ, an SEO agency intelligence platform. Write an internal marketing analysis for the agency team managing this client.
 
 Client: ${client.name}
@@ -549,10 +714,11 @@ DATA:
 Search Console: ${JSON.stringify(gsc) || 'not connected'}
 Google Analytics: ${JSON.stringify(ga4) || 'not connected'}
 CallRail (aggregated to shares): ${JSON.stringify(calls) || 'not connected'}
+Google Business Profile: ${JSON.stringify(gbp) || 'not connected'}
 
 Rules:
 - Every claim must reference specific numbers from the data
-- Cross-reference sources (search vs sessions vs calls)
+- Cross-reference sources (search vs sessions vs calls vs profile views)
 - Use monthlyTrend data to call out trends and seasonality
 - Be honest about small numbers
 - Be specific: name actual pages, queries, channels
@@ -611,30 +777,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const region = getRegion(client.region)
   ;(client as any).regionLabel = region.label
-  const [gsc, ga4, calls, econ, weather] = await Promise.all([
+  const [gsc, ga4, calls, gbp, econ, weather] = await Promise.all([
     getGscData(id, days),
     getGa4Data(id, days),
     getCallData(id, days),
+    getGbpData(id, days),
     reportType === 'publication' ? getEconomicData(days, region.fredUnemployment) : Promise.resolve(null),
     reportType === 'publication' ? getWeatherData(days, region.lat, region.lon, region.timezone, region.label) : Promise.resolve(null),
   ])
   const calendar = reportType === 'publication' ? getCalendarContext(days) : null
 
-  if (!gsc && !ga4 && !calls) {
+  if (!gsc && !ga4 && !calls && !gbp) {
     return NextResponse.json({ error: 'No connected data sources with data for this client yet' }, { status: 400 })
   }
 
-  const macro = analyzeMacro(
-    econ as any,
-    (gsc as any)?.monthlyTrend?.map((m: any) => ({ month: m.month, value: m.impressions })) ?? null,
-    (ga4 as any)?.monthlyTrend?.map((m: any) => ({ month: m.month, value: m.sessions })) ?? null,
-  )
-
-  const charts = buildCharts(gsc, ga4, econ, macro)
+  const demand = pickDemand(gsc, ga4, gbp)
+  const macro = analyzeMacro(econ as any, demand.source, demand.label, demand.monthly)
+  const charts = buildCharts(demand.source, demand.label, demand.monthly, econ, macro)
 
   const prompt = reportType === 'publication'
-    ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar, macro)
-    : internalPrompt(client, days, gsc, ga4, calls)
+    ? publicationPrompt(client, days, gsc, ga4, calls, econ, weather, calendar, macro, gbp)
+    : internalPrompt(client, days, gsc, ga4, calls, gbp)
 
   const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -671,7 +834,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let stored: any
   let storedTitle: string
   if (reportType === 'publication') {
-    const sourceReport = assembleSourceReport(parsed, client, region, days, gsc, ga4, calls, econ, weather, macro, charts)
+    const sourceReport = assembleSourceReport(parsed, client, region, days, gsc, ga4, calls, gbp, econ, weather, macro, charts)
     stored = { ...sourceReport, report_type: 'publication' }
     storedTitle = sourceReport.title
   } else {
@@ -694,4 +857,3 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ report })
 }
-
