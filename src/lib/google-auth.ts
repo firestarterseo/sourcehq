@@ -33,18 +33,26 @@ export interface GoogleAuth {
     gsc_property: string | null
     ga4_property: string | null
     ga4_property_name: string | null
-      gbp_location: string | null
-      gbp_location_name: string | null
-      google_account: string | null
+    gbp_location: string | null
+    gbp_location_name: string | null
+    google_account: string | null
+    gbp_google_account: string | null
   }
 }
+
+export type GoogleAuthPurpose = 'default' | 'gbp'
 
 /**
  * Resolve a working Google access token for a client.
  * Priority: client's own connection -> agency connection -> none.
  * Property selections always come from the client's row.
+ * `purpose` picks which stored account to use in agency mode: 'default' for
+ * GSC/GA4 (google_account), 'gbp' for Business Profile (gbp_google_account,
+ * falling back to google_account if the client has never split them). This
+ * lets a client's GBP live under a different verified Google login than the
+ * one handling their Search Console/Analytics.
  */
-export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
+export async function getGoogleAuth(clientId: string, purpose: GoogleAuthPurpose = 'default'): Promise<GoogleAuth> {
   const supabase = adminClient()
 
   const { data: clientConn } = await supabase
@@ -58,9 +66,10 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
     gsc_property: clientConn?.credentials?.gsc_property ?? null,
     ga4_property: clientConn?.credentials?.ga4_property ?? null,
     ga4_property_name: clientConn?.credentials?.ga4_property_name ?? null,
-      gbp_location: clientConn?.credentials?.gbp_location ?? null,
-      gbp_location_name: clientConn?.credentials?.gbp_location_name ?? null,
-      google_account: clientConn?.credentials?.google_account ?? null,
+    gbp_location: clientConn?.credentials?.gbp_location ?? null,
+    gbp_location_name: clientConn?.credentials?.gbp_location_name ?? null,
+    google_account: clientConn?.credentials?.google_account ?? null,
+    gbp_google_account: clientConn?.credentials?.gbp_google_account ?? null,
   }
 
   // Mode 1: client has their own working Google connection
@@ -103,8 +112,9 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
 
   const connected = (agencyRows || []).filter((r: any) => r.status === 'connected' && r.credentials?.refresh_token)
   if (connected.length > 0) {
-    // Pick the account this client's selection is tagged to; fall back to the first connected account
-    const wanted = selection.google_account
+    // Pick the account this client's selection is tagged to; fall back to the first connected account.
+    // GBP calls prefer gbp_google_account (may differ from the GSC/GA4 account); everything else uses google_account.
+    const wanted = purpose === 'gbp' ? (selection.gbp_google_account || selection.google_account) : selection.google_account
     const chosen = (wanted && connected.find((r: any) => r.account_email === wanted)) || connected[0]
     const creds: any = chosen.credentials
 
@@ -140,7 +150,15 @@ export async function getGoogleAuth(clientId: string): Promise<GoogleAuth> {
 /** Save per-client property selections (works in agency or client mode). */
 export async function saveGoogleSelection(
   clientId: string,
-  patch: { gsc_property?: string | null; ga4_property?: string | null; ga4_property_name?: string | null; gbp_location?: string | null; gbp_location_name?: string | null; google_account?: string | null }
+  patch: {
+    gsc_property?: string | null
+    ga4_property?: string | null
+    ga4_property_name?: string | null
+    gbp_location?: string | null
+    gbp_location_name?: string | null
+    google_account?: string | null
+    gbp_google_account?: string | null
+  }
 ) {
   const supabase = adminClient()
   const { data: existing } = await supabase
@@ -184,10 +202,6 @@ export async function getAgencyGoogleStatus() {
   }
 }
 
-
-
-
-
 export async function getAllAgencyGoogleTokens(): Promise<{ email: string; token: string }[]> {
   const supabase = adminClient()
   const { data } = await supabase
@@ -218,4 +232,3 @@ export async function getAllAgencyGoogleTokens(): Promise<{ email: string; token
   }
   return out
 }
-

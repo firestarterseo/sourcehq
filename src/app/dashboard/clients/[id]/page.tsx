@@ -37,6 +37,16 @@ interface PropertyOptions {
   selected?: { gsc: string | null; ga4: string | null; account?: string | null }
 }
 
+interface GbpLocations {
+  available: boolean
+  pending?: boolean
+  error?: string
+  multiAccount?: boolean
+  locations?: { id: string; name: string; account: string }[]
+  selected?: string | null
+  selectedAccount?: string | null
+}
+
 interface CallRailData { connected: boolean; accountName?: string }
 interface CallRailCompany { id: string; name: string; accountId: string; accountName: string }
 interface CallRailCompanies { available: boolean; error?: string; accounts?: { id: string; name: string }[]; companies?: CallRailCompany[] }
@@ -86,7 +96,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [selGsc, setSelGsc] = useState('')
   const [selGa4, setSelGa4] = useState('')
   const [savingProps, setSavingProps] = useState(false)
-  const [gbpLocations, setGbpLocations] = useState<{ available: boolean; pending?: boolean; error?: string; locations?: { id: string; name: string }[] } | null>(null)
+  const [gbpLocations, setGbpLocations] = useState<GbpLocations | null>(null)
   const [selGbp, setSelGbp] = useState('')
   const [showGooglePicker, setShowGooglePicker] = useState(false)
 
@@ -189,7 +199,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       body: JSON.stringify({ gsc_property: selGsc || null, ga4_property: selGa4 || null, ga4_property_name: ga4Name, google_account: gAccount }),
     })
     setSavingProps(false)
-    const gbpName = gbpLocations?.locations?.find(l => l.id === selGbp)?.name || null; await fetch(`/api/clients/${id}/gbp-locations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName }) }); setShowGooglePicker(false)
+    const gbpMatch = gbpLocations?.locations?.find(l => l.id === selGbp); const gbpName = gbpMatch?.name || null; const gbpAccount = gbpMatch?.account || null; await fetch(`/api/clients/${id}/gbp-locations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName, gbp_google_account: gbpAccount }) }); setShowGooglePicker(false)
   }
 
   async function handleConnectCallrail() {
@@ -403,7 +413,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#0D1B3E', marginBottom: '5px' }}>Business Profile location</label>
                   {gbpLocations?.available ? (
-                    <select value={selGbp} onChange={e => setSelGbp(e.target.value)} style={selectStyle}><option value="">Select a location...</option>{(gbpLocations.locations || []).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+                    <SearchableSelect value={selGbp} onChange={setSelGbp} placeholder="Select a location..." options={(gbpLocations.locations || []).map(l => ({ value: l.id, label: l.name + (gbpLocations.multiAccount ? ' (' + l.account + ')' : '') }))} />
                   ) : (
                     <p style={{ fontSize: '12px', color: '#92400E', margin: 0 }}>{gbpLocations?.pending ? 'Business Profile API access pending Google approval.' : (gbpLocations?.error || 'Loading locations...')}</p>
                   )}
@@ -443,6 +453,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     </div>
   )
 }
+
+
+
+
+
 
 
 

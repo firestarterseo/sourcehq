@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: { session } } = await getSession()
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  const auth = await getGoogleAuth(id)
+  const auth = await getGoogleAuth(id, 'gbp')
   if (!auth.token) {
     return NextResponse.json({ connected: false, revoked: auth.revoked || false })
   }
@@ -126,3 +126,4 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ connected: true, error: err.message }, { status: 500 })
   }
 }
+
