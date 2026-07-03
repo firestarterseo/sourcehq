@@ -1,6 +1,8 @@
 ﻿import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+
 const BASE_URL = 'https://sourcehq.vercel.app'
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
@@ -29,25 +31,47 @@ export async function GET(request: NextRequest) {
     if (!tokens.access_token) {
       throw new Error(`No access token received: ${JSON.stringify(tokens)}`)
     }
+
     const adminSupabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
+
+    // MERGE the new OAuth tokens into any existing credentials for this client
+    // instead of overwriting the whole row. The pre-existing credentials may
+    // already carry gsc_property, ga4_property, ga4_property_name,
+    // gbp_location, gbp_location_name, google_account, gbp_google_account -
+    // property selections the user made through the agency-pool picker - and
+    // a blind upsert (write-shape overwrite) blows those away, silently
+    // undoing setup work every time someone reconnects. Read-then-merge
+    // preserves selections while updating only the token fields.
+    const { data: existing } = await adminSupabase
+      .from('data_connections')
+      .select('credentials')
+      .eq('client_id', clientId)
+      .eq('source_type', 'google')
+      .single()
+
+    const merged = {
+      ...(existing?.credentials || {}),
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: Date.now() + (tokens.expires_in * 1000),
+    }
+
     const { error: upsertError } = await adminSupabase
       .from('data_connections')
       .upsert({
         client_id: clientId,
         source_type: 'google',
         status: 'connected',
-        credentials: {
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expires_at: Date.now() + (tokens.expires_in * 1000),
-        },
+        credentials: merged,
         last_synced: new Date().toISOString(),
       }, { onConflict: 'client_id,source_type' })
+
     if (upsertError) throw upsertError
+
     return NextResponse.redirect(`${BASE_URL}${dest}?connected=google`)
   } catch (err: any) {
     console.error('Google OAuth callback error:', err)
