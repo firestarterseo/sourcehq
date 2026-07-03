@@ -11,9 +11,7 @@ function Icon({ name, size = 17 }: { name: string; size?: number }) {
 }
 
 export interface TileStatus {
-  // map of source key -> connected boolean
   connected: Record<string, boolean>
-  // optional sublabel override per key (e.g. CallRail account name)
   detail?: Record<string, string | undefined>
 }
 
@@ -21,11 +19,8 @@ interface Props {
   clientId: string
   status: TileStatus
   googleConnected: boolean
-  // called when user clicks Connect on a google-backed source (starts OAuth)
   googleConnectHref: string
-  // called when user clicks Connect/Manage on CallRail
   onManageCallrail: () => void
-  // called when user clicks Manage on Google (property picker)
   onManageGoogle: () => void
   onManageGbp: () => void
 }
@@ -38,12 +33,15 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
     return !!status.connected[s.key]
   }
 
-  const connectedSources = DATA_SOURCES.filter(isConnected)
+  // Any live source is always shown as a tile - connected sources get a green
+  // dot and View data / Manage links, unconnected sources get a gray dot and a
+  // Set up / Connect action. Non-live ("soon") sources still hide behind the
+  // "+ Add data source" catalog until they ship.
+  const liveSources = DATA_SOURCES.filter(s => s.status === 'live')
 
-  // group connected sources by category, preserving CATEGORY_ORDER
   const grouped: { category: SourceCategory; sources: DataSourceDef[] }[] = []
   for (const cat of CATEGORY_ORDER) {
-    const inCat = connectedSources.filter(s => s.category === cat)
+    const inCat = liveSources.filter(s => s.category === cat)
     if (inCat.length) grouped.push({ category: cat, sources: inCat })
   }
 
@@ -52,29 +50,43 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
   const iconWrap = (active: boolean) => ({ width: '32px', height: '32px', borderRadius: '8px', background: active ? '#EDE9FE' : '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: active ? '#6D28D9' : '#9CA3AF' })
   const linkStyle = { fontSize: '12px', color: '#6D28D9', textDecoration: 'none', fontWeight: 500 } as const
   const manageStyle = { background: 'transparent', color: '#9CA3AF', border: 'none', fontSize: '12px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 } as const
+  const setupBtn = { background: 'transparent', color: '#6D28D9', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', padding: 0 } as const
+  const setupAnchor = { color: '#6D28D9', fontSize: '12px', fontWeight: 500, textDecoration: 'none' } as const
 
-  function ConnectedTile({ s }: { s: DataSourceDef }) {
-    const sub = status.detail?.[s.key] || s.sublabel
-    const isGoogle = !!s.googleBacked
+  function manageHandler(s: DataSourceDef): (() => void) | null {
+    if (s.key === 'gbp') return onManageGbp
+    if (s.googleBacked) return onManageGoogle
+    if (s.key === 'callrail') return onManageCallrail
+    return null
+  }
+
+  function Tile({ s }: { s: DataSourceDef }) {
+    const connected = isConnected(s)
+    const sub = connected ? (status.detail?.[s.key] || s.sublabel) : s.sublabel
+    const handler = manageHandler(s)
+    const needsGoogleConnect = s.googleBacked && !googleConnected && !connected
+
     return (
       <div style={tileBase}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={iconWrap(true)}><Icon name={s.icon} /></span>
-          <span style={dot(true)} />
+          <span style={iconWrap(connected)}><Icon name={s.icon} /></span>
+          <span style={dot(connected)} />
         </div>
         <div>
           <div style={{ fontSize: '13px', fontWeight: 500, color: '#0D1B3E' }}>{s.name}</div>
           <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>
         </div>
         <div style={{ marginTop: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {s.dataRoute && <Link href={`/dashboard/clients/${clientId}/data/${s.dataRoute}`} style={linkStyle}>View data</Link>}
-          {s.key === 'gbp'
-            ? <button onClick={onManageGbp} style={manageStyle}>Manage</button>
-            : isGoogle
-            ? <button onClick={onManageGoogle} style={manageStyle}>Manage</button>
-            : s.key === 'callrail'
-              ? <button onClick={onManageCallrail} style={manageStyle}>Manage</button>
-              : null}
+          {connected ? (
+            <>
+              {s.dataRoute && <Link href={`/dashboard/clients/${clientId}/data/${s.dataRoute}`} style={linkStyle}>View data</Link>}
+              {handler && <button onClick={handler} style={manageStyle}>Manage</button>}
+            </>
+          ) : needsGoogleConnect ? (
+            <a href={googleConnectHref} style={setupAnchor}>Connect Google</a>
+          ) : handler ? (
+            <button onClick={handler} style={setupBtn}>Set up</button>
+          ) : null}
         </div>
       </div>
     )
@@ -87,21 +99,14 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
         <button onClick={() => setShowCatalog(true)} style={{ background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9', borderRadius: '8px', padding: '6px 14px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>+ Add data source</button>
       </div>
 
-      {connectedSources.length === 0 ? (
-        <div style={{ background: '#fff', border: '0.5px dashed #D1D5DB', borderRadius: '12px', padding: '28px', textAlign: 'center' }}>
-          <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 0 12px' }}>No data sources connected yet.</p>
-          <button onClick={() => setShowCatalog(true)} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Connect your first source</button>
-        </div>
-      ) : (
-        grouped.map(group => (
-          <div key={group.category} style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>{group.category}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
-              {group.sources.map(s => <ConnectedTile key={s.key} s={s} />)}
-            </div>
+      {grouped.map(group => (
+        <div key={group.category} style={{ marginBottom: '20px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>{group.category}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
+            {group.sources.map(s => <Tile key={s.key} s={s} />)}
           </div>
-        ))
-      )}
+        </div>
+      ))}
 
       {showCatalog && (
         <div onClick={() => setShowCatalog(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(13,27,62,0.45)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
@@ -136,7 +141,7 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
                               <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Coming soon</span>
                             ) : s.googleBacked ? (
                               googleConnected
-                                ? <button onClick={() => { setShowCatalog(false); s.key === 'gbp' ? onManageGbp() : onManageGoogle() }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans,sans-serif' }}>Set up</button>
+                                ? <button onClick={() => { setShowCatalog(false); s.key === 'gbp' ? onManageGbp() : onManageGoogle() }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Set up</button>
                                 : <a href={googleConnectHref} style={{ background: '#6D28D9', color: '#fff', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>Connect Google</a>
                             ) : s.key === 'callrail' ? (
                               <button onClick={() => { setShowCatalog(false); onManageCallrail() }} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Connect</button>
@@ -155,4 +160,3 @@ export default function DataSourceTiles({ clientId, status, googleConnected, goo
     </div>
   )
 }
-
