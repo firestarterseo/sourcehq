@@ -226,6 +226,7 @@ export default function ClientDetailPage({ params, searchParams }: { params: Pro
       body: JSON.stringify({ gsc_property: selGsc || null, ga4_property: selGa4 || null, ga4_property_name: ga4Name, google_account: gAccount }),
     })
     setSavingProps(false)
+    loadConnections()
     setShowGooglePicker(false)
   }
 
@@ -239,6 +240,7 @@ export default function ClientDetailPage({ params, searchParams }: { params: Pro
       body: JSON.stringify({ gbp_location: selGbp || null, gbp_location_name: gbpName, gbp_google_account: gbpAccount }),
     })
     setSavingGbp(false)
+    loadConnections()
     setShowGbpPicker(false)
   }
 
