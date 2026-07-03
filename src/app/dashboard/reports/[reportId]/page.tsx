@@ -28,6 +28,13 @@ interface Report {
   content: Content
 }
 
+interface ClientMeta {
+  id: string
+  name: string
+  industry?: string
+  website?: string
+}
+
 const DERIVATIVES = [
   { key: 'linkedin', label: 'LinkedIn post' },
   { key: 'twitter', label: 'X thread' },
@@ -36,10 +43,16 @@ const DERIVATIVES = [
   { key: 'press', label: 'Press pitch' },
 ]
 
+const CLIENT_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'visibility', label: 'Visibility' },
+  { key: 'content', label: 'Content' },
+  { key: 'distribution', label: 'Distribution' },
+  { key: 'sources', label: 'Data Sources' },
+] as const
+
 const CARD = { background: '#fff', border: '0.5px solid #E5E5E3', borderRadius: '12px', padding: '24px', marginBottom: '16px' }
 const H3 = { fontFamily: 'Outfit, sans-serif', fontSize: '15px', fontWeight: 600, color: '#0D1B3E', marginBottom: '14px' } as const
-
-// (Styled in-app rendering now lives in SourceReportView; the style-free export still ships via Copy/Download.)
 
 function slugify(s: string): string {
   return (s || 'report')
@@ -81,7 +94,7 @@ function InternalSection({ title, items, color }: { title: string; items?: strin
 export default function ReportPage({ params }: { params: Promise<{ reportId: string }> }) {
   const { reportId } = use(params)
   const [report, setReport] = useState<Report | null>(null)
-  const [clientName, setClientName] = useState<string | null>(null)
+  const [clientMeta, setClientMeta] = useState<ClientMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [schemaCopied, setSchemaCopied] = useState(false)
@@ -98,7 +111,10 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
         setReport(data.report || null)
         setLoading(false)
         if (data.report?.client_id) {
-          fetch(`/api/clients/${data.report.client_id}`).then(r => r.json()).then(d => setClientName(d.client?.name || null)).catch(() => {})
+          fetch(`/api/clients/${data.report.client_id}`)
+            .then(r => r.json())
+            .then(d => { if (d.client) setClientMeta(d.client) })
+            .catch(() => {})
         }
       })
       .catch(() => setLoading(false))
@@ -107,7 +123,6 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
   const c = report?.content
   const isPublication = c?.report_type === 'publication'
 
-  // The single source of truth: the in-app preview renders exactly what Copy emits.
   const contentHtml = isPublication && c ? renderContentHtml(c as SourceReport) : ''
   const fileBase = report ? slugify(report.title) : 'report'
 
@@ -178,33 +193,67 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     padding: '7px 14px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', flexShrink: 0,
   } as const
 
+  const websiteClean = clientMeta?.website ? clientMeta.website.replace(/^https?:\/\//, '').replace(/\/$/, '') : ''
+  const clientHref = clientMeta ? `/dashboard/clients/${clientMeta.id}` : null
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
-      <Sidebar active="Reports" email="" />
+      <Sidebar active="Clients" email="" />
       <div style={{ marginLeft: '220px', flex: 1, background: '#F8F8F6' }}>
-        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-            <Link href={report?.client_id ? `/dashboard/clients/${report.client_id}?tab=content` : "/dashboard/reports"} style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', flexShrink: 0 }}>← {clientName || 'Reports'}</Link>
-            {report && (
+        {/* Client identity row - matches the header on the client detail page */}
+        <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+            <Link href="/dashboard/clients" style={{ fontSize: '13px', color: '#6B7280', textDecoration: 'none', flexShrink: 0 }}>← Clients</Link>
+            <span style={{ color: '#E5E5E3' }}>|</span>
+            {clientMeta ? (
               <>
-                <span style={{ color: '#E5E5E3' }}>|</span>
-                <span style={{ fontSize: '15px', fontWeight: 600, color: '#0D1B3E', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{report.title}</span>
+                <span style={{ fontSize: '15px', fontWeight: 600, color: '#0D1B3E' }}>{clientMeta.name}</span>
+                <span style={{ fontSize: '12px', color: '#9CA3AF' }}>
+                  {clientMeta.industry || 'No industry'}{websiteClean ? ` · ${websiteClean}` : ''}
+                </span>
               </>
+            ) : (
+              <span style={{ fontSize: '15px', fontWeight: 600, color: '#0D1B3E' }}>{report?.title || 'Report'}</span>
             )}
           </div>
-          {report && isPublication && (
-            <div style={{ display: 'flex', gap: '8px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', padding: '8px 0' }}>
-              <button onClick={copyHtml} style={btn(copied)}>
-                {copied ? 'Copied!' : 'Copy HTML'}
-              </button>
-              <button onClick={copySchema} style={{ ...btn(schemaCopied), ...(schemaCopied ? {} : { background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9' }) }}>
-                {schemaCopied ? 'Copied!' : 'Copy schema'}
-              </button>
-              <button onClick={downloadHtml} style={ghostBtn}>Download .html</button>
-              <button onClick={downloadSchema} style={ghostBtn}>Download .json</button>
-            </div>
-          )}
         </div>
+
+        {/* Client tab bar - Content is active; other tabs navigate to the client page */}
+        {clientHref && (
+          <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '0 24px', display: 'flex', gap: '26px' }}>
+            {CLIENT_TABS.map(t => (
+              <Link
+                key={t.key}
+                href={t.key === 'content' ? `${clientHref}?tab=content` : `${clientHref}?tab=${t.key}`}
+                style={{
+                  padding: '14px 2px',
+                  fontSize: '13px',
+                  fontFamily: 'DM Sans, sans-serif',
+                  textDecoration: 'none',
+                  color: t.key === 'content' ? '#0D1B3E' : '#6B7280',
+                  fontWeight: t.key === 'content' ? 600 : 400,
+                  borderBottom: t.key === 'content' ? '2px solid #6D28D9' : '2px solid transparent',
+                }}
+              >
+                {t.label}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Toolbar row - Copy/Download for publication reports */}
+        {report && isPublication && (
+          <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '10px 24px', display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+            <button onClick={copyHtml} style={btn(copied)}>
+              {copied ? 'Copied!' : 'Copy HTML'}
+            </button>
+            <button onClick={copySchema} style={{ ...btn(schemaCopied), ...(schemaCopied ? {} : { background: 'transparent', color: '#6D28D9', border: '0.5px solid #6D28D9' }) }}>
+              {schemaCopied ? 'Copied!' : 'Copy schema'}
+            </button>
+            <button onClick={downloadHtml} style={ghostBtn}>Download .html</button>
+            <button onClick={downloadSchema} style={ghostBtn}>Download .json</button>
+          </div>
+        )}
 
         <div style={{ padding: '32px', maxWidth: '820px' }}>
           {loading ? (
@@ -270,8 +319,3 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     </div>
   )
 }
-
-
-
-
-
