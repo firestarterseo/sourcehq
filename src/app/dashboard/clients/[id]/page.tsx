@@ -93,6 +93,9 @@ export default function ClientDetailPage({ params, searchParams }: { params: Pro
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null)
 
   const [googleConnected, setGoogleConnected] = useState(false)
+  const [gscConnected, setGscConnected] = useState(false)
+  const [ga4Connected, setGa4Connected] = useState(false)
+  const [gbpConnected, setGbpConnected] = useState(false)
 
   const [options, setOptions] = useState<PropertyOptions | null>(null)
   const [propsLoaded, setPropsLoaded] = useState(false)
@@ -137,7 +140,7 @@ export default function ClientDetailPage({ params, searchParams }: { params: Pro
   function loadConnections() {
     fetch(`/api/clients/${id}/connection-status`)
       .then(r => r.json())
-      .then(data => { setGoogleConnected(!!data.google) })
+      .then(data => { setGoogleConnected(!!data.google); setGscConnected(!!data.gsc); setGa4Connected(!!data.ga4); setGbpConnected(!!data.gbp) })
       .catch(() => setGoogleConnected(false))
 
     loadCallrail()
@@ -424,7 +427,7 @@ export default function ClientDetailPage({ params, searchParams }: { params: Pro
             clientId={id}
             googleConnected={googleConnected}
             googleConnectHref={`/api/auth/google?clientId=${id}`}
-            status={{ connected: { gsc: googleConnected, ga4: googleConnected, gbp: googleConnected, callrail: crConnected }, detail: { callrail: callrail?.accountName } }}
+            status={{ connected: { gsc: gscConnected, ga4: ga4Connected, gbp: gbpConnected, callrail: crConnected }, detail: { callrail: callrail?.accountName } }}
             onManageGoogle={() => setShowGooglePicker(!showGooglePicker)}
             onManageGbp={() => setShowGbpPicker(!showGbpPicker)}
             onManageCallrail={() => { setShowCallrailForm(!showCallrailForm); setCallrailError('') }}
@@ -502,4 +505,6 @@ export default function ClientDetailPage({ params, searchParams }: { params: Pro
     </div>
   )
 }
+
+
 
