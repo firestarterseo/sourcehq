@@ -243,7 +243,7 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
 
         {/* Toolbar row - Copy/Download for publication reports */}
         {report && isPublication && (
-          <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '10px 24px', display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ background: '#fff', borderBottom: '0.5px solid #E5E5E3', padding: '10px 24px', display: 'flex', justifyContent: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
             <button onClick={copyHtml} style={btn(copied)}>
               {copied ? 'Copied!' : 'Copy HTML'}
             </button>
@@ -319,3 +319,4 @@ export default function ReportPage({ params }: { params: Promise<{ reportId: str
     </div>
   )
 }
+
