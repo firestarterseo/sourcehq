@@ -22,7 +22,13 @@ function LoginInner() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(inviteError === "invalid" ? "Sign in failed. Try again." : null)
+  const [error, setError] = useState<string | null>(
+    inviteError === "unauthorized"
+      ? "That account isn't part of this workspace. Ask an admin to invite you."
+      : inviteError === "invalid"
+      ? "Sign in failed. Try again."
+      : null
+  )
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
