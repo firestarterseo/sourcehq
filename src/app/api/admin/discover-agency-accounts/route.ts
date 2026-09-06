@@ -73,21 +73,46 @@ async function ga4PropertiesForToken(token: string, email: string) {
 async function gbpLocationsForToken(token: string, email: string) {
   const out: { id: string; name: string; cityState: string; account: string }[] = []
   try {
-    const acctRes = await fetch(`${GBP_ACCT_API}/accounts`, { headers: { Authorization: `Bearer ${token}` } })
-    if (!acctRes.ok) return out
-    const acctJson = await acctRes.json()
-    for (const acct of acctJson.accounts || []) {
-      const locRes = await fetch(
-        `${GBP_INFO_API}/${acct.name}/locations?readMask=name,title,storefrontAddress&pageSize=100`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (!locRes.ok) continue
-      const locJson = await locRes.json()
-      for (const loc of locJson.locations || []) {
-        const addr = loc.storefrontAddress
-        const cityState = addr ? `${addr.locality || ''}${addr.administrativeArea ? ', ' + addr.administrativeArea : ''}` : ''
-        out.push({ id: loc.name, name: loc.title || loc.name, cityState, account: email })
-      }
+    // accounts.list defaults AND maxes out at pageSize 20 with no pageSize param
+    // passed here, and was never paginated - any login with more than 20 GBP
+    // accounts silently lost the rest. Page through with pageToken.
+    const accounts: { name: string }[] = []
+    let acctPageToken: string | undefined
+    let acctGuard = 0
+    do {
+      const u = new URL(`${GBP_ACCT_API}/accounts`)
+      u.searchParams.set('pageSize', '20')
+      if (acctPageToken) u.searchParams.set('pageToken', acctPageToken)
+      const acctRes = await fetch(u.toString(), { headers: { Authorization: `Bearer ${token}` } })
+      if (!acctRes.ok) break
+      const acctJson = await acctRes.json()
+      accounts.push(...(acctJson.accounts || []))
+      acctPageToken = acctJson.nextPageToken || undefined
+      acctGuard++
+    } while (acctPageToken && acctGuard < 20)
+
+    for (const acct of accounts) {
+      // locations.list maxes out at pageSize 100 (already requested), but was
+      // never paginated either - any account with more than 100 locations
+      // silently lost the rest. Page through with pageToken.
+      let locPageToken: string | undefined
+      let locGuard = 0
+      do {
+        const u = new URL(`${GBP_INFO_API}/${acct.name}/locations`)
+        u.searchParams.set('readMask', 'name,title,storefrontAddress')
+        u.searchParams.set('pageSize', '100')
+        if (locPageToken) u.searchParams.set('pageToken', locPageToken)
+        const locRes = await fetch(u.toString(), { headers: { Authorization: `Bearer ${token}` } })
+        if (!locRes.ok) break
+        const locJson = await locRes.json()
+        for (const loc of locJson.locations || []) {
+          const addr = loc.storefrontAddress
+          const cityState = addr ? `${addr.locality || ''}${addr.administrativeArea ? ', ' + addr.administrativeArea : ''}` : ''
+          out.push({ id: loc.name, name: loc.title || loc.name, cityState, account: email })
+        }
+        locPageToken = locJson.nextPageToken || undefined
+        locGuard++
+      } while (locPageToken && locGuard < 20)
     }
   } catch { /* skip this account */ }
   return out
