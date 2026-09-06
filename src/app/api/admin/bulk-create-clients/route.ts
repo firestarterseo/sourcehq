@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, AuthError, adminClient } from '@/lib/auth-context'
 import { saveGoogleSelection } from '@/lib/google-auth'
+import bundledCandidates from './candidates.json'
 
 const FIRESTARTER_ORG_ID = 'd3acaf18-a924-4d25-8f5a-99b6893ae843'
 
-// Owner-gated, bulk-onboards approved candidates from the
-// discover-agency-accounts review spreadsheet. Takes a POST body of
-// { candidates: [...], dryRun: boolean }. Defaults to dryRun: true so
+// Owner-gated, bulk-onboards the approved candidates from the
+// discover-agency-accounts review spreadsheet (Include=Yes rows only,
+// 111 of them, bundled alongside this route as ./candidates.json so
+// nothing sensitive has to pass through a browser fetch body).
+//
+// Takes a POST body of { dryRun: boolean }. Defaults to dryRun: true so
 // hitting this without a body, or with dryRun omitted, never writes
 // anything - dryRun must be explicitly set to false to actually create
 // rows. Idempotent: re-running (even with dryRun: false) skips any
 // candidate whose normalized website domain already matches an existing
 // client, so this is safe to re-run after fixing individual errors.
+// A `candidates` array in the body overrides the bundled list, for testing
+// a subset without editing the file.
 //
 // Each candidate creates, at most: one `clients` row, one `data_connections`
 // row (source_type 'google', covering GSC/GA4/GBP selections together, same
@@ -23,8 +29,8 @@ const FIRESTARTER_ORG_ID = 'd3acaf18-a924-4d25-8f5a-99b6893ae843'
 //
 // Hit it once deployed, logged in as owner:
 //   POST https://sourcehq.vercel.app/api/admin/bulk-create-clients
-//   body: { candidates: [...], dryRun: true }   <- sanity check first
-//   body: { candidates: [...], dryRun: false }  <- actually creates rows
+//   body: { dryRun: true }   <- sanity check first, uses bundled candidates.json
+//   body: { dryRun: false }  <- actually creates rows
 
 interface BulkCandidate {
   domain: string
@@ -62,18 +68,19 @@ export async function POST(request: NextRequest) {
     throw err
   }
 
-  let body: any
+  let body: any = {}
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'Expected a JSON body with a candidates array' }, { status: 400 })
+    // No body (or non-JSON body) is fine - falls through to the bundled
+    // candidate list with dryRun defaulting to true below.
   }
 
-  const candidates: BulkCandidate[] = Array.isArray(body.candidates) ? body.candidates : []
+  const candidates: BulkCandidate[] = Array.isArray(body.candidates) ? body.candidates : (bundledCandidates as BulkCandidate[])
   const dryRun = body.dryRun !== false // anything other than an explicit `false` stays a dry run
 
   if (candidates.length === 0) {
-    return NextResponse.json({ error: 'No candidates provided' }, { status: 400 })
+    return NextResponse.json({ error: 'No candidates to process' }, { status: 400 })
   }
 
   const supabase = adminClient()
