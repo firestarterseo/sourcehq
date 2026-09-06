@@ -102,7 +102,18 @@ async function pullGa4(token: string, property: string, days: number) {
     if (!res.ok) throw new Error(json?.error?.message ?? `GA4 ${res.status}`)
     return json
   }
+  // GA4's Data API wants relative keywords like "90daysAgo"/"yesterday" in
+  // the request itself, but those strings are not valid values for the
+  // data_snapshots.period_start/period_end date columns - insertSnapshot()
+  // will throw "invalid input syntax for type date" if we hand it these
+  // directly. Compute the real calendar dates those keywords resolve to
+  // (yesterday = 1 day back, matching GA4's own definition) for the
+  // returned `range`, and keep the relative-keyword form only for the API call.
   const dateRanges = [{ startDate: `${days}daysAgo`, endDate: 'yesterday' }]
+  const calendarRange = {
+    startDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  }
   const [totalsReport, channelsReport] = await Promise.all([
     runReport({ dateRanges, metrics: [{ name: 'sessions' }, { name: 'totalUsers' }, { name: 'screenPageViews' }, { name: 'conversions' }] }),
     runReport({
@@ -126,7 +137,7 @@ async function pullGa4(token: string, property: string, days: number) {
       channel: row.dimensionValues[0].value, sessions: Number(row.metricValues[0].value),
     })),
   }
-  return { range: dateRanges[0], raw: { totalsReport, channelsReport }, normalized }
+  return { range: calendarRange, raw: { totalsReport, channelsReport }, normalized }
 }
 
 // ---------- GBP ----------
