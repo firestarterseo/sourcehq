@@ -101,12 +101,26 @@ async function callrailCompanies(agencyKey: string) {
     if (!accRes.ok) return out
     const accJson = await accRes.json()
     for (const acct of accJson.accounts || []) {
-      const compRes = await fetch(`${CALLRAIL_API}/a/${acct.id}/companies.json`, { headers })
-      if (!compRes.ok) continue
-      const compJson = await compRes.json()
-      for (const c of compJson.companies || []) {
-        out.push({ id: c.id, name: c.name, account_id: acct.id })
-      }
+      // CallRail's default per_page is 100 with no pagination, this silently
+      // truncates any account with more than 100 companies. Page through with
+      // the API's max per_page (250) until total_pages is exhausted.
+      let page = 1
+      let totalPages = 1
+      let guard = 0
+      do {
+        const compRes = await fetch(
+          `${CALLRAIL_API}/a/${acct.id}/companies.json?per_page=250&page=${page}`,
+          { headers }
+        )
+        if (!compRes.ok) break
+        const compJson = await compRes.json()
+        for (const c of compJson.companies || []) {
+          out.push({ id: c.id, name: c.name, account_id: acct.id })
+        }
+        totalPages = compJson.total_pages || 1
+        page++
+        guard++
+      } while (page <= totalPages && guard < 20)
     }
   } catch { /* ignore */ }
   return out
