@@ -234,6 +234,18 @@ async function pullCallrail(creds: any, days: number) {
   return { range, raw: { callCount: calls.length }, normalized }
 }
 
+// Inserts one snapshot row and THROWS if the insert itself failed, so a
+// silent DB-side rejection (bad constraint, oversized payload, whatever)
+// surfaces as an 'error' status instead of being reported as 'ok' just
+// because the external API pull succeeded. Do not call supabase.insert()
+// directly in the handlers below, always go through this.
+async function insertSnapshot(supabase: ReturnType<typeof adminClient>, row: {
+  connection_id: string; source_type: string; period_start: string; period_end: string; raw_data: unknown; normalized_data: unknown
+}) {
+  const { error } = await supabase.from('data_snapshots').insert(row)
+  if (error) throw new Error(`data_snapshots insert failed: ${error.message}`)
+}
+
 export async function POST(request: NextRequest) {
   try {
     await requireRole('owner')
@@ -283,7 +295,7 @@ export async function POST(request: NextRequest) {
           const pulled = await pullGsc(auth.token, creds.gsc_property, days)
           clientResult.sources.gsc = { status: 'ok', ...pulled.normalized }
           if (!dryRun) {
-            await supabase.from('data_snapshots').insert({
+            await insertSnapshot(supabase, {
               connection_id: googleConn.id, source_type: 'gsc',
               period_start: pulled.range.startDate, period_end: pulled.range.endDate,
               raw_data: pulled.raw, normalized_data: pulled.normalized,
@@ -301,7 +313,7 @@ export async function POST(request: NextRequest) {
           const pulled = await pullGa4(auth.token, creds.ga4_property, days)
           clientResult.sources.ga4 = { status: 'ok', ...pulled.normalized }
           if (!dryRun) {
-            await supabase.from('data_snapshots').insert({
+            await insertSnapshot(supabase, {
               connection_id: googleConn.id, source_type: 'ga4',
               period_start: pulled.range.startDate, period_end: pulled.range.endDate,
               raw_data: pulled.raw, normalized_data: pulled.normalized,
@@ -319,7 +331,7 @@ export async function POST(request: NextRequest) {
           const pulled = await pullGbp(auth.token, creds.gbp_location, days)
           clientResult.sources.gbp = { status: 'ok', ...pulled.normalized }
           if (!dryRun) {
-            await supabase.from('data_snapshots').insert({
+            await insertSnapshot(supabase, {
               connection_id: googleConn.id, source_type: 'gbp',
               period_start: pulled.range.startDate, period_end: pulled.range.endDate,
               raw_data: pulled.raw, normalized_data: pulled.normalized,
@@ -336,7 +348,7 @@ export async function POST(request: NextRequest) {
         const pulled = await pullCallrail(callrailConn.credentials || {}, days)
         clientResult.sources.callrail = { status: 'ok', ...pulled.normalized }
         if (!dryRun) {
-          await supabase.from('data_snapshots').insert({
+          await insertSnapshot(supabase, {
             connection_id: callrailConn.id, source_type: 'callrail',
             period_start: pulled.range.startDate, period_end: pulled.range.endDate,
             raw_data: pulled.raw, normalized_data: pulled.normalized,
