@@ -41,13 +41,40 @@ export function hostOf(url: string) {
   catch { return String(url).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase() }
 }
 
+const GENERIC_BUSINESS_WORDS = new Set([
+  'window', 'windows', 'door', 'doors', 'company', 'co', 'corp', 'corporation', 'inc', 'llc',
+  'group', 'of', 'the', 'and', 'services', 'service', 'solutions', 'construction', 'contractor',
+  'contractors', 'replacement', 'replacements', 'installation', 'installations', 'install',
+  'installers', 'installer', 'home', 'homes', 'glass', 'exteriors', 'exterior', 'siding',
+  'roofing', 'national', 'local', 'best', 'top', 'rated',
+])
+
+function significantTokens(name: string): string[] {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((w) => w.length >= 3 && !GENERIC_BUSINESS_WORDS.has(w))
+}
+
 export function tagCitations(citations: string[], domain: string, competitors: string[]): { url: string; tag: 'own' | 'competitor' | null }[] {
-  const compHosts = competitors.map((c) => String(c).toLowerCase().trim()).filter(Boolean)
+  const compEntries = competitors
+    .map((c) => String(c).trim())
+    .filter(Boolean)
+    .map((c) => ({ squashed: c.toLowerCase().replace(/\s+/g, ''), tokens: significantTokens(c) }))
+
   return (citations || []).map((url) => {
     const host = hostOf(url)
+    const labels = host.split('.')
+    const domainLabel = labels.length > 2 ? labels[labels.length - 2] : labels[0]
     let tag: 'own' | 'competitor' | null = null
-    if (domain && host.includes(domain)) tag = 'own'
-    else if (compHosts.some((c) => host.includes(c.replace(/\s+/g, '')) || c.includes(host.split('.')[0]))) tag = 'competitor'
+    if (domain && host.includes(domain)) {
+      tag = 'own'
+    } else if (compEntries.some(({ squashed, tokens }) =>
+      host.includes(squashed) || tokens.some((t) => domainLabel.includes(t) || t.includes(domainLabel))
+    )) {
+      tag = 'competitor'
+    }
     return { url, tag }
   })
 }
