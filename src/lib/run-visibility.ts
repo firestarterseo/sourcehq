@@ -204,16 +204,7 @@ async function queryAIOverviewCloro(keyword: string, location?: string | null): 
       throw new Error(`cloro non-success: ${JSON.stringify(data?.error || {}).slice(0, 200)}`)
     }
     const aio = data?.result?.aioverview
-    if (!aio) {
-      // TEMP DEBUG: diagnosing empty AI Overview results after adding geo-targeting.
-      console.log('[cloro-debug] empty aioverview', {
-        keyword,
-        location: location || null,
-        resultKeys: data?.result ? Object.keys(data.result) : null,
-        raw: JSON.stringify(data).slice(0, 3000),
-      })
-      return { answer: '', citations: [] }
-    }
+    if (!aio) return { answer: '', citations: [] }
     const answer = typeof aio.markdown === 'string' && aio.markdown
       ? aio.markdown
       : (typeof aio.text === 'string' ? aio.text : '')
