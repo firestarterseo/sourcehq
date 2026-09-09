@@ -1,5 +1,6 @@
 ﻿import { createClient } from '@supabase/supabase-js'
 import { Client as QStashClient } from '@upstash/qstash'
+import { getRegion, RegionDef } from './regions'
 
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions'
 export const PERPLEXITY_MODEL = 'sonar-pro'
@@ -177,7 +178,7 @@ async function queryGemini(prompt: string): Promise<{ answer: string; citations:
   }
 }
 
-async function queryAIOverviewCloro(keyword: string): Promise<{ answer: string; citations: string[] }> {
+async function queryAIOverviewCloro(keyword: string, location?: string | null): Promise<{ answer: string; citations: string[] }> {
   const apiKey = process.env.CLORO_API_KEY
   if (!apiKey) throw new Error('CLORO_API_KEY not configured')
   const controller = new AbortController()
@@ -189,6 +190,7 @@ async function queryAIOverviewCloro(keyword: string): Promise<{ answer: string; 
       body: JSON.stringify({
         query: keyword,
         country: 'US',
+        ...(location ? { location } : {}),
         include: { aioverview: { markdown: true } },
       }),
       signal: controller.signal,
@@ -214,7 +216,7 @@ async function queryAIOverviewCloro(keyword: string): Promise<{ answer: string; 
   }
 }
 
-async function queryAIMode(keyword: string): Promise<{ answer: string; citations: string[] }> {
+async function queryAIMode(keyword: string, location?: string | null): Promise<{ answer: string; citations: string[] }> {
   const apiKey = process.env.CLORO_API_KEY
   if (!apiKey) throw new Error('CLORO_API_KEY not configured')
   const controller = new AbortController()
@@ -226,6 +228,7 @@ async function queryAIMode(keyword: string): Promise<{ answer: string; citations
       body: JSON.stringify({
         prompt: keyword,
         country: 'US',
+        ...(location ? { location } : {}),
         include: { markdown: true },
       }),
       signal: controller.signal,
@@ -251,7 +254,7 @@ async function queryAIMode(keyword: string): Promise<{ answer: string; citations
   }
 }
 
-async function queryCopilot(keyword: string): Promise<{ answer: string; citations: string[] }> {
+async function queryCopilot(keyword: string, state?: string | null): Promise<{ answer: string; citations: string[] }> {
   const apiKey = process.env.CLORO_API_KEY
   if (!apiKey) throw new Error('CLORO_API_KEY not configured')
   const controller = new AbortController()
@@ -263,6 +266,7 @@ async function queryCopilot(keyword: string): Promise<{ answer: string; citation
       body: JSON.stringify({
         prompt: keyword,
         country: 'US',
+        ...(state ? { state } : {}),
         include: { markdown: true },
       }),
       signal: controller.signal,
@@ -514,13 +518,13 @@ export async function runClientVisibility(db: any, clientId: string): Promise<Ru
 // Phase 1: process a single queued job (one prompt x one engine)
 // ============================================================
 
-async function queryOneEngine(engine: string, promptText: string): Promise<{ answer: string; citations: string[] }> {
+async function queryOneEngine(engine: string, promptText: string, region: RegionDef): Promise<{ answer: string; citations: string[] }> {
   if (engine.startsWith('perplexity:')) return queryPerplexity(promptText)
   if (engine.startsWith('chatgpt:')) return queryChatGPT(promptText)
   if (engine.startsWith('gemini:')) return queryGemini(promptText)
-  if (engine.startsWith('copilot:')) return queryCopilot(promptText)
-  if (engine.startsWith('google_ai_mode:')) return queryAIMode(promptText)
-  if (engine.startsWith('google_ai_overviews:')) return queryAIOverviewCloro(promptText)
+  if (engine.startsWith('copilot:')) return queryCopilot(promptText, region.state)
+  if (engine.startsWith('google_ai_mode:')) return queryAIMode(promptText, region.cloroLocation)
+  if (engine.startsWith('google_ai_overviews:')) return queryAIOverviewCloro(promptText, region.cloroLocation)
   throw new Error(`Unknown engine: ${engine}`)
 }
 
@@ -546,7 +550,7 @@ export async function processVisibilityJob(db: any, jobId: string): Promise<{ ok
   if (job.status === 'done') return { ok: true, status: 'done', runId: job.run_id }
 
   const { data: prompt } = await db.from('ai_visibility_prompts').select('prompt_text').eq('id', job.prompt_id).single()
-  const { data: client } = await db.from('clients').select('name, website').eq('id', job.client_id).single()
+  const { data: client } = await db.from('clients').select('name, website, region').eq('id', job.client_id).single()
   if (!prompt || !client) {
     await db.from('ai_visibility_jobs').update({ status: 'error', error: 'Prompt or client missing', attempts: (job.attempts || 0) + 1, finished_at: new Date().toISOString() }).eq('id', jobId)
     await recomputeBatch(db, job.batch_id)
@@ -555,11 +559,12 @@ export async function processVisibilityJob(db: any, jobId: string): Promise<{ ok
 
   const brand = String(client.name).trim()
   const domain = client.website ? String(client.website).replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase() : ''
+  const region = getRegion(client.region)
 
   await db.from('ai_visibility_jobs').update({ status: 'running', started_at: new Date().toISOString(), attempts: (job.attempts || 0) + 1 }).eq('id', jobId)
 
   try {
-    const { answer, citations } = await queryOneEngine(job.engine, prompt.prompt_text)
+    const { answer, citations } = await queryOneEngine(job.engine, prompt.prompt_text, region)
     const cited = domain ? citations.some((u) => String(u).toLowerCase().includes(domain)) : false
     const parsed = answer
       ? await parseAnswer(brand, prompt.prompt_text, answer)
